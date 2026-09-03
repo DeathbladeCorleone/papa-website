@@ -1,0 +1,12 @@
+---
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import PageForm from "@/components/admin/PageForm.astro";
+import { repoFrom } from "@/lib/context";
+const pending = await repoFrom(Astro.locals).listCommentsByStatus("pending");
+const error = Astro.url.searchParams.get("error");
+---
+<AdminLayout title="New page" pending={pending.length}>
+  <h1>New page</h1>
+  {error === "title" && <p class="notice err">Please enter a title.</p>}
+  <PageForm />
+</AdminLayout>

@@ -1,0 +1,49 @@
+---
+import Base from "@/layouts/Base.astro";
+import PostCard from "@/components/PostCard.astro";
+import PostMeta from "@/components/PostMeta.astro";
+import Subscribe from "@/components/Subscribe.astro";
+import { repoFrom, envFrom } from "@/lib/context";
+import { pageMeta } from "@/lib/domain/seo";
+import { siteUrl } from "@/config/site";
+import { SITE } from "@/config/site";
+
+const repo = repoFrom(Astro.locals);
+const [settings, featured, recent] = await Promise.all([
+  repo.getSettings(),
+  repo.getFeatured(),
+  repo.listPublished({ limit: SITE.pageSize + 1 }),
+]);
+
+// Exclude the featured post from the "recent" river to avoid duplication.
+const rest = recent.filter((p) => p.id !== featured?.id).slice(0, SITE.pageSize);
+const meta = pageMeta({ path: "/" }, settings, siteUrl(envFrom(Astro.locals)));
+---
+
+<Base meta={meta}>
+  {featured && (
+    <section class="featured">
+      <span class="kicker">Featured</span>
+      <PostMeta post={featured} />
+      <h2><a href={`/blog/${featured.slug}`} style="text-decoration:none;color:inherit">{featured.title}</a></h2>
+      <p class="excerpt" style="font-size:1.2rem">{featured.excerpt}</p>
+      <a class="btn secondary" href={`/blog/${featured.slug}`}>Read the essay →</a>
+    </section>
+  )}
+
+  {rest.length > 0 ? (
+    <div class="post-list measure">
+      {rest.map((post) => <PostCard post={post} />)}
+    </div>
+  ) : (
+    <p class="muted measure">No posts yet. Check back soon.</p>
+  )}
+
+  {recent.length > SITE.pageSize && (
+    <p class="center" style="margin-top:2.5rem">
+      <a class="btn secondary" href="/blog">All posts →</a>
+    </p>
+  )}
+
+  <Subscribe />
+</Base>

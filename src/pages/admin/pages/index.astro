@@ -1,0 +1,41 @@
+---
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import { repoFrom } from "@/lib/context";
+
+const repo = repoFrom(Astro.locals);
+const [pages, pending] = await Promise.all([
+  repo.listAllPages(),
+  repo.listCommentsByStatus("pending"),
+]);
+---
+
+<AdminLayout title="Pages" pending={pending.length}>
+  <div class="toolbar" style="justify-content:space-between">
+    <h1 style="margin:0">Pages</h1>
+    <a class="btn" href="/admin/pages/new">＋ New page</a>
+  </div>
+  <p class="muted small">Standalone pages like About or Contact. Published pages marked “in menu” appear in the site navigation.</p>
+
+  <table class="admin-table">
+    <thead><tr><th>Title</th><th>/slug</th><th>Status</th><th>Menu</th><th>Actions</th></tr></thead>
+    <tbody>
+      {pages.map((p) => (
+        <tr>
+          <td><a href={`/admin/pages/${p.id}`}>{p.title}</a></td>
+          <td class="muted">/{p.slug}</td>
+          <td><span class={`pill ${p.status}`}>{p.status}</span></td>
+          <td>{p.showInMenu ? "Yes" : "—"}</td>
+          <td>
+            <a class="btn secondary small" href={`/admin/pages/${p.id}`}>Edit</a>
+            <form class="inline-form" method="POST" action="/api/admin/pages" data-confirm="Delete this page?">
+              <input type="hidden" name="_action" value="delete" />
+              <input type="hidden" name="id" value={p.id} />
+              <button class="btn danger small" type="submit">Delete</button>
+            </form>
+          </td>
+        </tr>
+      ))}
+      {pages.length === 0 && <tr><td colspan="5" class="muted">No pages yet.</td></tr>}
+    </tbody>
+  </table>
+</AdminLayout>

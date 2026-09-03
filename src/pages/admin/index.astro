@@ -1,0 +1,44 @@
+---
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import { repoFrom } from "@/lib/context";
+
+const repo = repoFrom(Astro.locals);
+const [posts, pending, messages, subscribers] = await Promise.all([
+  repo.listAllPosts(),
+  repo.listCommentsByStatus("pending"),
+  repo.listMessages(),
+  repo.listSubscribers(),
+]);
+const published = posts.filter((p) => p.status === "published").length;
+const drafts = posts.length - published;
+const unread = messages.filter((m) => !m.read).length;
+---
+
+<AdminLayout title="Dashboard" pending={pending.length}>
+  <h1>Welcome back</h1>
+  <div class="stat-grid">
+    <div class="stat"><div class="n">{published}</div><div class="l">Published posts</div></div>
+    <div class="stat"><div class="n">{drafts}</div><div class="l">Drafts</div></div>
+    <div class="stat"><div class="n">{pending.length}</div><div class="l">Comments to review</div></div>
+    <div class="stat"><div class="n">{unread}</div><div class="l">Unread messages</div></div>
+    <div class="stat"><div class="n">{subscribers.length}</div><div class="l">Subscribers</div></div>
+  </div>
+
+  <div class="toolbar">
+    <a class="btn" href="/admin/posts/new">✎ Write a new post</a>
+    {pending.length > 0 && <a class="btn secondary" href="/admin/comments">Review {pending.length} comment{pending.length === 1 ? "" : "s"}</a>}
+  </div>
+
+  <h2 style="font-family:var(--sans);font-size:1.1rem;margin-top:2rem">Recent posts</h2>
+  <table class="admin-table">
+    <tbody>
+      {posts.slice(0, 6).map((p) => (
+        <tr>
+          <td><a href={`/admin/posts/${p.id}`}>{p.title}</a></td>
+          <td><span class={`pill ${p.status}`}>{p.status}</span></td>
+        </tr>
+      ))}
+      {posts.length === 0 && <tr><td class="muted">No posts yet — write your first one.</td></tr>}
+    </tbody>
+  </table>
+</AdminLayout>

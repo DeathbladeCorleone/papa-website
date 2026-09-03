@@ -1,0 +1,39 @@
+---
+import "@/styles/theme.css";
+import { usingDemoData } from "@/lib/context";
+const error = Astro.url.searchParams.get("error");
+const demo = usingDemoData(Astro.locals);
+// Already logged in? Go to the dashboard.
+if (Astro.locals.admin) return Astro.redirect("/admin");
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sign in · Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet" />
+  </head>
+  <body style="display:grid;place-items:center;min-height:100vh">
+    <main style="width:min(24rem,90vw)">
+      <h1 style="text-align:center">Sign in</h1>
+      {error && <p class="notice err">Incorrect email or password.</p>}
+      {demo && (
+        <p class="notice info small">Demo mode — sign in with <code>admin@local</code> / <code>changeme</code>.</p>
+      )}
+      <form method="POST" action="/api/admin/login" class="stack" style="margin-top:1rem">
+        <div class="field">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" required autocomplete="username" />
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" required autocomplete="current-password" />
+        </div>
+        <button class="btn" type="submit" style="width:100%">Sign in</button>
+      </form>
+      <p class="center small muted" style="margin-top:1.5rem"><a href="/">← Back to site</a></p>
+    </main>
+  </body>
+</html>

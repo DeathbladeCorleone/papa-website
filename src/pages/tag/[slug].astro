@@ -1,0 +1,35 @@
+---
+import Base from "@/layouts/Base.astro";
+import PostCard from "@/components/PostCard.astro";
+import { repoFrom, envFrom } from "@/lib/context";
+import { pageMeta } from "@/lib/domain/seo";
+import { siteUrl } from "@/config/site";
+
+const { slug } = Astro.params;
+const repo = repoFrom(Astro.locals);
+const settings = await repo.getSettings();
+const tag = slug ? await repo.getTagBySlug(slug) : null;
+if (!tag) Astro.response.status = 404;
+
+const posts = tag ? await repo.listPublished({ tagSlug: tag.slug }) : [];
+const meta = pageMeta(
+  { path: `/tag/${slug}`, title: tag ? `#${tag.name}` : "Tag" },
+  settings,
+  siteUrl(envFrom(Astro.locals)),
+);
+---
+
+<Base meta={meta}>
+  {tag ? (
+    <>
+      <h1 class="measure">Tagged “{tag.name}”</h1>
+      {posts.length > 0 ? (
+        <div class="post-list measure">{posts.map((p) => <PostCard post={p} />)}</div>
+      ) : (
+        <p class="muted measure">Nothing tagged “{tag.name}” yet.</p>
+      )}
+    </>
+  ) : (
+    <div class="measure center" style="padding:4rem 0"><h1>Tag not found</h1></div>
+  )}
+</Base>

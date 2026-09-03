@@ -1,0 +1,92 @@
+---
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import { repoFrom } from "@/lib/context";
+import { formatDate } from "@/lib/format";
+import { renderCommentBody } from "@/lib/domain/html";
+
+const repo = repoFrom(Astro.locals);
+const [pending, approved, posts] = await Promise.all([
+  repo.listCommentsByStatus("pending"),
+  repo.listCommentsByStatus("approved"),
+  repo.listAllPosts(),
+]);
+const postMap = new Map(posts.map((p) => [p.id, p]));
+const backTo = "/admin/comments";
+---
+
+<AdminLayout title="Comments" pending={pending.length}>
+  <h1>Comments</h1>
+
+  <h2 style="font-family:var(--sans);font-size:1.1rem">Awaiting review ({pending.length})</h2>
+  {pending.length === 0 && <p class="muted">Nothing to review right now.</p>}
+  {pending.map((c) => {
+    const post = postMap.get(c.postId);
+    return (
+      <div class="stat" style="margin-bottom:1rem">
+        <div class="small muted">
+          On <a href={post ? `/blog/${post.slug}#c-${c.id}` : "#"}>{post?.title ?? "post"}</a> · {formatDate(c.createdAt)}
+        </div>
+        <div><strong>{c.authorName}</strong> <span class="muted small">&lt;{c.authorEmail}&gt;</span></div>
+        <div class="body" set:html={renderCommentBody(c.body)} style="margin:0.4rem 0" />
+        <div class="toolbar" style="margin:0.5rem 0 0">
+          <form class="inline-form" method="POST" action="/api/admin/comments">
+            <input type="hidden" name="_action" value="approve" />
+            <input type="hidden" name="id" value={c.id} />
+            <input type="hidden" name="return_to" value={backTo} />
+            <button class="btn small" type="submit">Approve</button>
+          </form>
+          <form class="inline-form" method="POST" action="/api/admin/comments">
+            <input type="hidden" name="_action" value="spam" />
+            <input type="hidden" name="id" value={c.id} />
+            <input type="hidden" name="return_to" value={backTo} />
+            <button class="btn secondary small" type="submit">Mark spam</button>
+          </form>
+          <form class="inline-form" method="POST" action="/api/admin/comments" data-confirm="Delete this comment?">
+            <input type="hidden" name="_action" value="delete" />
+            <input type="hidden" name="id" value={c.id} />
+            <input type="hidden" name="return_to" value={backTo} />
+            <button class="btn danger small" type="submit">Delete</button>
+          </form>
+        </div>
+        <details style="margin-top:0.5rem">
+          <summary class="small" style="cursor:pointer">Reply</summary>
+          <form method="POST" action="/api/admin/comments" class="stack" style="margin-top:0.5rem">
+            <input type="hidden" name="_action" value="reply" />
+            <input type="hidden" name="post_id" value={c.postId} />
+            <input type="hidden" name="parent_id" value={c.id} />
+            <input type="hidden" name="return_to" value={backTo} />
+            <textarea name="body" required placeholder="Write a reply (auto-published as the author)…" style="min-height:4rem"></textarea>
+            <button class="btn small" type="submit" style="align-self:flex-start">Post reply &amp; approve thread</button>
+          </form>
+        </details>
+      </div>
+    );
+  })}
+
+  <h2 style="font-family:var(--sans);font-size:1.1rem;margin-top:2rem">Published ({approved.length})</h2>
+  <table class="admin-table">
+    <tbody>
+      {approved.map((c) => {
+        const post = postMap.get(c.postId);
+        return (
+          <tr>
+            <td>
+              <strong>{c.authorName}</strong>{c.isAuthor && <span class="pill" style="margin-left:0.4rem">author</span>}
+              <div class="small muted" set:html={renderCommentBody(c.body)} />
+            </td>
+            <td class="small"><a href={post ? `/blog/${post.slug}` : "#"}>{post?.title ?? "post"}</a></td>
+            <td>
+              <form class="inline-form" method="POST" action="/api/admin/comments" data-confirm="Delete this comment?">
+                <input type="hidden" name="_action" value="delete" />
+                <input type="hidden" name="id" value={c.id} />
+                <input type="hidden" name="return_to" value={backTo} />
+                <button class="btn danger small" type="submit">Delete</button>
+              </form>
+            </td>
+          </tr>
+        );
+      })}
+      {approved.length === 0 && <tr><td class="muted">No published comments yet.</td></tr>}
+    </tbody>
+  </table>
+</AdminLayout>

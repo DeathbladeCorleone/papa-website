@@ -1,0 +1,28 @@
+---
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import { repoFrom } from "@/lib/context";
+import { formatDate } from "@/lib/format";
+import { renderCommentBody } from "@/lib/domain/html";
+
+const repo = repoFrom(Astro.locals);
+const [messages, pending] = await Promise.all([
+  repo.listMessages(),
+  repo.listCommentsByStatus("pending"),
+]);
+---
+<AdminLayout title="Messages" pending={pending.length}>
+  <h1>Contact messages</h1>
+  {messages.length === 0 && <p class="muted">No messages yet.</p>}
+  {messages.map((m) => (
+    <div class="stat" style={`margin-bottom:1rem;${m.read ? "opacity:0.7" : ""}`}>
+      <div class="small muted">{formatDate(m.createdAt)} {!m.read && <span class="pill draft">new</span>}</div>
+      <div><strong>{m.name}</strong> · <a href={`mailto:${m.email}`}>{m.email}</a></div>
+      <div class="body" set:html={renderCommentBody(m.body)} style="margin-top:0.4rem" />
+      <form class="inline-form" method="POST" action="/api/admin/messages" style="margin-top:0.5rem">
+        <input type="hidden" name="id" value={m.id} />
+        <input type="hidden" name="read" value={m.read ? "false" : "true"} />
+        <button class="btn secondary small" type="submit">{m.read ? "Mark unread" : "Mark read"}</button>
+      </form>
+    </div>
+  ))}
+</AdminLayout>

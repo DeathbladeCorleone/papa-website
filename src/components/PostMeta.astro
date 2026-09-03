@@ -1,0 +1,19 @@
+---
+import type { PostWithRelations } from "@/lib/domain/types";
+import { formatDate, isoDate } from "@/lib/format";
+import { readingTimeLabel } from "@/lib/domain/reading-time";
+
+interface Props { post: PostWithRelations; showReadingTime?: boolean }
+const { post, showReadingTime = true } = Astro.props;
+const rt = showReadingTime ? readingTimeLabel(post.bodyHtml) : "";
+---
+
+<div class="post-meta">
+  {post.publishedAt && (
+    <time datetime={isoDate(post.publishedAt)}>{formatDate(post.publishedAt)}</time>
+  )}
+  {post.category && (
+    <><span aria-hidden="true">·</span><a href={`/category/${post.category.slug}`}>{post.category.name}</a></>
+  )}
+  {rt && (<><span aria-hidden="true">·</span><span>{rt}</span></>)}
+</div>

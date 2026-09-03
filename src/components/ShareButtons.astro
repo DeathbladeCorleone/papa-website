@@ -1,0 +1,16 @@
+---
+interface Props { url: string; title: string }
+const { url, title } = Astro.props;
+const enc = (s: string) => encodeURIComponent(s);
+const x = `https://twitter.com/intent/tweet?url=${enc(url)}&text=${enc(title)}`;
+const wa = `https://wa.me/?text=${enc(`${title} ${url}`)}`;
+const fb = `https://www.facebook.com/sharer/sharer.php?u=${enc(url)}`;
+const mail = `mailto:?subject=${enc(title)}&body=${enc(url)}`;
+---
+<div class="share" aria-label="Share this post">
+  <span class="muted">Share:</span>
+  <a href={x} target="_blank" rel="noopener noreferrer">X</a>
+  <a href={wa} target="_blank" rel="noopener noreferrer">WhatsApp</a>
+  <a href={fb} target="_blank" rel="noopener noreferrer">Facebook</a>
+  <a href={mail}>Email</a>
+</div>

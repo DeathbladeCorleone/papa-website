@@ -1,0 +1,37 @@
+---
+import Base from "@/layouts/Base.astro";
+import { repoFrom, envFrom } from "@/lib/context";
+import { pageMeta } from "@/lib/domain/seo";
+import { excerptFromHtml } from "@/lib/domain/excerpt";
+import { siteUrl } from "@/config/site";
+
+const { slug } = Astro.params;
+const repo = repoFrom(Astro.locals);
+const settings = await repo.getSettings();
+const page = slug ? await repo.getPublishedPageBySlug(slug) : null;
+if (!page) Astro.response.status = 404;
+
+const meta = pageMeta(
+  {
+    path: `/${slug}`,
+    title: page ? page.title : "Not found",
+    description: page ? excerptFromHtml(page.bodyHtml) : undefined,
+  },
+  settings,
+  siteUrl(envFrom(Astro.locals)),
+);
+---
+
+<Base meta={meta}>
+  {page ? (
+    <article class="measure">
+      <h1>{page.title}</h1>
+      <div class="prose" set:html={page.bodyHtml} style="margin-top:1.5rem" />
+    </article>
+  ) : (
+    <div class="measure center" style="padding:4rem 0">
+      <h1>Page not found</h1>
+      <p><a class="btn secondary" href="/">← Back home</a></p>
+    </div>
+  )}
+</Base>

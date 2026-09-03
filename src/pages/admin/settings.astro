@@ -1,0 +1,34 @@
+---
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import { repoFrom } from "@/lib/context";
+
+const repo = repoFrom(Astro.locals);
+const [settings, pending] = await Promise.all([
+  repo.getSettings(),
+  repo.listCommentsByStatus("pending"),
+]);
+const saved = Astro.url.searchParams.get("saved");
+---
+<AdminLayout title="Settings" pending={pending.length}>
+  <h1>Site settings</h1>
+  {saved && <p class="notice ok">Settings saved.</p>}
+  <form method="POST" action="/api/admin/settings" class="stack" style="max-width:34rem">
+    <div class="field">
+      <label for="title">Site title</label>
+      <input type="text" id="title" name="title" required value={settings.title} />
+    </div>
+    <div class="field">
+      <label for="tagline">Tagline <span class="muted">(shown under the title)</span></label>
+      <input type="text" id="tagline" name="tagline" value={settings.tagline} />
+    </div>
+    <div class="field">
+      <label for="author_name">Author name <span class="muted">(byline &amp; comment replies)</span></label>
+      <input type="text" id="author_name" name="author_name" required value={settings.authorName} />
+    </div>
+    <div class="field">
+      <label for="description">Site description <span class="muted">(default SEO description)</span></label>
+      <textarea id="description" name="description" style="min-height:4rem">{settings.description}</textarea>
+    </div>
+    <button class="btn" type="submit" style="align-self:flex-start">Save settings</button>
+  </form>
+</AdminLayout>

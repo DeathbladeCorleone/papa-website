@@ -1,0 +1,92 @@
+---
+import "@/styles/theme.css";
+import { usingDemoData } from "@/lib/context";
+
+interface Props { title: string; pending?: number }
+const { title, pending = 0 } = Astro.props;
+const admin = Astro.locals.admin;
+const path = Astro.url.pathname;
+const demo = usingDemoData(Astro.locals);
+
+const links = [
+  { href: "/admin", label: "Dashboard" },
+  { href: "/admin/posts", label: "Posts" },
+  { href: "/admin/comments", label: `Comments${pending ? ` (${pending})` : ""}` },
+  { href: "/admin/pages", label: "Pages" },
+  { href: "/admin/messages", label: "Messages" },
+  { href: "/admin/subscribers", label: "Subscribers" },
+  { href: "/admin/settings", label: "Settings" },
+];
+const active = (href: string) => href === "/admin" ? path === "/admin" : path.startsWith(href);
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title} · Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet" />
+    <style>
+      body { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+      @media (max-width: 720px) { body { grid-template-columns: 1fr; } }
+      .admin-side { background: var(--paper-raised); border-right: 1px solid var(--rule); padding: 1.5rem 1rem; font-family: var(--sans); }
+      .admin-side .logo { font-weight: 600; font-size: 1.1rem; margin-bottom: 1.25rem; }
+      .admin-side nav { display: flex; flex-direction: column; gap: 0.15rem; }
+      .admin-side a { display: block; padding: 0.5rem 0.7rem; border-radius: var(--radius); color: var(--ink-soft); text-decoration: none; font-size: 0.95rem; }
+      .admin-side a:hover { background: var(--rule-soft); }
+      .admin-side a[aria-current="page"] { background: var(--accent); color: #fff; }
+      .admin-side .foot { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--rule); font-size: 0.85rem; }
+      .admin-main { padding: 2rem clamp(1rem, 4vw, 3rem); font-family: var(--sans); max-width: 60rem; }
+      .admin-main h1 { font-family: var(--sans); font-size: 1.5rem; }
+      .admin-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+      .admin-table th, .admin-table td { text-align: left; padding: 0.6rem 0.5rem; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+      .admin-table th { color: var(--ink-faint); font-weight: 500; }
+      .pill { font-size: 0.75rem; padding: 0.1rem 0.5rem; border-radius: 999px; background: var(--rule-soft); color: var(--ink-soft); }
+      .pill.published { background: #e6efe7; color: var(--ok); }
+      .pill.draft { background: #f2ede2; color: var(--accent-ink); }
+      .inline-form { display: inline; }
+      .toolbar { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin: 1rem 0; }
+      .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+      .stat { background: var(--paper-raised); border: 1px solid var(--rule); border-radius: var(--radius); padding: 1rem 1.25rem; }
+      .stat .n { font-size: 1.8rem; font-weight: 600; font-family: var(--serif); }
+      .stat .l { font-size: 0.85rem; color: var(--ink-faint); }
+    </style>
+  </head>
+  <body>
+    <aside class="admin-side">
+      <div class="logo">✎ Admin</div>
+      <nav>
+        {links.map((l) => (
+          <a href={l.href} aria-current={active(l.href) ? "page" : undefined}>{l.label}</a>
+        ))}
+      </nav>
+      <div class="foot">
+        <a href="/" target="_blank" rel="noopener">View site ↗</a>
+        <form method="POST" action="/api/admin/logout" style="margin-top:0.5rem">
+          <button class="btn secondary small" type="submit">Log out</button>
+        </form>
+        {admin && <p class="muted small" style="margin-top:0.75rem">{admin.email}</p>}
+      </div>
+    </aside>
+    <main class="admin-main">
+      {demo && (
+        <p class="notice info">
+          <strong>Demo mode.</strong> No Supabase is connected, so this dashboard is using
+          in-memory sample data that resets on restart. Set your Supabase keys to go live.
+        </p>
+      )}
+      <slot />
+    </main>
+    <script is:inline>
+      // Confirm dangerous actions on forms marked data-confirm.
+      document.addEventListener("submit", (e) => {
+        const form = e.target;
+        const msg = form && form.getAttribute && form.getAttribute("data-confirm");
+        if (msg && !window.confirm(msg)) e.preventDefault();
+      });
+    </script>
+  </body>
+</html>

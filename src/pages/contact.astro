@@ -1,0 +1,48 @@
+---
+import Base from "@/layouts/Base.astro";
+import { repoFrom, envFrom } from "@/lib/context";
+import { pageMeta } from "@/lib/domain/seo";
+import { siteUrl } from "@/config/site";
+
+const repo = repoFrom(Astro.locals);
+const settings = await repo.getSettings();
+// Optional CMS "contact" page provides the intro copy above the form.
+const cms = await repo.getPublishedPageBySlug("contact");
+const meta = pageMeta({ path: "/contact", title: "Contact" }, settings, siteUrl(envFrom(Astro.locals)));
+const status = Astro.url.searchParams.get("sent");
+---
+
+<Base meta={meta}>
+  <div class="measure">
+    <h1>{cms?.title ?? "Contact"}</h1>
+    {cms ? (
+      <div class="prose" set:html={cms.bodyHtml} style="margin:1.25rem 0 2rem" />
+    ) : (
+      <p class="muted" style="margin:1rem 0 2rem">Have a question or a note? Send it along.</p>
+    )}
+
+    {status === "1" && <p class="notice ok">Thank you — your message has been sent.</p>}
+    {status === "error" && <p class="notice err">Something went wrong. Please try again.</p>}
+
+    <form method="POST" action="/api/contact" class="stack">
+      <div class="honeypot" aria-hidden="true">
+        <label>Website<input type="text" name="website" tabindex="-1" autocomplete="off" /></label>
+      </div>
+      <div class="grid-2">
+        <div class="field">
+          <label for="name">Name</label>
+          <input type="text" id="name" name="name" required minlength="2" maxlength="80" />
+        </div>
+        <div class="field">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" required />
+        </div>
+      </div>
+      <div class="field">
+        <label for="body">Message</label>
+        <textarea id="body" name="body" required minlength="2" maxlength="5000"></textarea>
+      </div>
+      <button class="btn" type="submit">Send message</button>
+    </form>
+  </div>
+</Base>

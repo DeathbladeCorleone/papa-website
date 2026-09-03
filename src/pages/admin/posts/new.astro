@@ -1,0 +1,18 @@
+---
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import PostForm from "@/components/admin/PostForm.astro";
+import { repoFrom } from "@/lib/context";
+
+const repo = repoFrom(Astro.locals);
+const [categories, pending] = await Promise.all([
+  repo.listCategories(),
+  repo.listCommentsByStatus("pending"),
+]);
+const error = Astro.url.searchParams.get("error");
+---
+
+<AdminLayout title="New post" pending={pending.length}>
+  <h1>New post</h1>
+  {error === "title" && <p class="notice err">Please enter a title.</p>}
+  <PostForm categories={categories} />
+</AdminLayout>

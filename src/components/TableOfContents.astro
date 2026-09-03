@@ -1,0 +1,15 @@
+---
+import type { TocEntry } from "@/lib/domain/toc";
+interface Props { entries: TocEntry[] }
+const { entries } = Astro.props;
+---
+{entries.length >= 3 && (
+  <nav class="toc measure" aria-label="Table of contents">
+    <strong>On this page</strong>
+    <ul>
+      {entries.map((e) => (
+        <li class={`level-${e.level}`}><a href={`#${e.id}`}>{e.text}</a></li>
+      ))}
+    </ul>
+  </nav>
+)}

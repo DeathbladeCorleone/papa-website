@@ -1,0 +1,40 @@
+---
+import Base from "@/layouts/Base.astro";
+import PostCard from "@/components/PostCard.astro";
+import { repoFrom, envFrom } from "@/lib/context";
+import { pageMeta } from "@/lib/domain/seo";
+import { normalizeQuery } from "@/lib/domain/search";
+import { siteUrl } from "@/config/site";
+
+const repo = repoFrom(Astro.locals);
+const settings = await repo.getSettings();
+const q = normalizeQuery(Astro.url.searchParams.get("q") ?? "");
+const results = q ? await repo.searchPublished(q) : [];
+const meta = pageMeta({ path: "/search", title: "Search" }, settings, siteUrl(envFrom(Astro.locals)));
+---
+
+<Base meta={meta}>
+  <div class="measure">
+    <h1>Search</h1>
+    <form method="GET" action="/search" role="search" style="margin:1.25rem 0 2rem">
+      <div class="field" style="margin:0">
+        <label for="q" class="muted">Find an essay</label>
+        <input type="search" id="q" name="q" value={q} placeholder="Try a topic, a word, a tag…" autofocus />
+      </div>
+    </form>
+
+    {q && (
+      <p class="muted small">
+        {results.length === 0
+          ? `No results for “${q}”.`
+          : `${results.length} result${results.length === 1 ? "" : "s"} for “${q}”.`}
+      </p>
+    )}
+
+    {results.length > 0 && (
+      <div class="post-list" style="margin-top:1.5rem">
+        {results.map((p) => <PostCard post={p} />)}
+      </div>
+    )}
+  </div>
+</Base>

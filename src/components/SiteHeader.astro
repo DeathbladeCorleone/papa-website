@@ -1,0 +1,40 @@
+---
+import type { Category, Page, SiteSettings } from "@/lib/domain/types";
+interface Props {
+  settings: SiteSettings;
+  categories: Category[];
+  pages: Page[];
+  currentPath?: string;
+}
+const { settings, categories, pages, currentPath = "" } = Astro.props;
+const isCurrent = (href: string) =>
+  href === currentPath || (href !== "/" && currentPath.startsWith(href));
+---
+
+<header class="site-header">
+  <div class="container bar">
+    <a class="brand" href="/">
+      {settings.title}
+      {settings.tagline && <small>{settings.tagline}</small>}
+    </a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/" aria-current={currentPath === "/" ? "page" : undefined}>Home</a>
+      {categories.map((c) => (
+        <a
+          href={`/category/${c.slug}`}
+          aria-current={isCurrent(`/category/${c.slug}`) ? "page" : undefined}
+        >
+          {c.name}
+        </a>
+      ))}
+      {pages.map((p) => (
+        <a href={`/${p.slug}`} aria-current={isCurrent(`/${p.slug}`) ? "page" : undefined}>
+          {p.title}
+        </a>
+      ))}
+      <a class="search-link" href="/search" aria-label="Search">
+        <span aria-hidden="true">⌕</span> Search
+      </a>
+    </nav>
+  </div>
+</header>

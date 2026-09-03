@@ -1,0 +1,80 @@
+---
+import Base from "@/layouts/Base.astro";
+import PostMeta from "@/components/PostMeta.astro";
+import TableOfContents from "@/components/TableOfContents.astro";
+import ShareButtons from "@/components/ShareButtons.astro";
+import PostCard from "@/components/PostCard.astro";
+import Comments from "@/components/Comments.astro";
+import { repoFrom, envFrom } from "@/lib/context";
+import { withHeadingIds } from "@/lib/domain/toc";
+import { articleMeta, articleJsonLd, pageMeta } from "@/lib/domain/seo";
+import { siteUrl } from "@/config/site";
+
+const { slug } = Astro.params;
+const repo = repoFrom(Astro.locals);
+const settings = await repo.getSettings();
+const url = siteUrl(envFrom(Astro.locals));
+const post = slug ? await repo.getPublishedBySlug(slug) : null;
+
+if (!post) {
+  Astro.response.status = 404;
+}
+
+const rendered = post ? withHeadingIds(post.bodyHtml) : null;
+const [related, comments] = post
+  ? await Promise.all([repo.relatedPosts(post), repo.listApprovedForPost(post.id)])
+  : [[], []];
+
+const meta = post
+  ? articleMeta(post, settings, url)
+  : pageMeta({ path: Astro.url.pathname, title: "Not found" }, settings, url);
+const jsonLd = post ? articleJsonLd(post, settings, url) : undefined;
+const shareUrl = `${url}/blog/${post?.slug ?? ""}`;
+---
+
+<Base meta={meta} jsonLd={jsonLd}>
+  {!post ? (
+    <div class="measure center" style="padding:4rem 0">
+      <h1>Post not found</h1>
+      <p class="muted">This essay may have been moved or unpublished.</p>
+      <p><a class="btn secondary" href="/">← Back home</a></p>
+    </div>
+  ) : (
+    <article>
+      <header class="measure" style="margin-bottom:1.5rem">
+        <h1>{post.title}</h1>
+        <PostMeta post={post} />
+      </header>
+
+      {post.coverUrl && (
+        <figure style="margin:0 0 2rem">
+          <img src={post.coverUrl} alt="" style="width:100%;border-radius:var(--radius)" />
+        </figure>
+      )}
+
+      {rendered && <TableOfContents entries={rendered.toc} />}
+
+      <div class="prose measure" set:html={rendered?.html} style="margin-top:1.75rem" />
+
+      <div class="measure" style="margin-top:2.5rem">
+        {post.tags.length > 0 && (
+          <p style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1.25rem">
+            {post.tags.map((t) => <a class="tag-pill" href={`/tag/${t.slug}`}>#{t.name}</a>)}
+          </p>
+        )}
+        <ShareButtons url={shareUrl} title={post.title} />
+      </div>
+
+      {related.length > 0 && (
+        <section class="related measure">
+          <h2>Related reading</h2>
+          <div class="post-list">
+            {related.map((r) => <PostCard post={r} />)}
+          </div>
+        </section>
+      )}
+
+      <Comments post={post} comments={comments} />
+    </article>
+  )}
+</Base>

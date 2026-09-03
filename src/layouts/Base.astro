@@ -1,0 +1,71 @@
+---
+import "@/styles/theme.css";
+import SiteHeader from "@/components/SiteHeader.astro";
+import SiteFooter from "@/components/SiteFooter.astro";
+import type { MetaTags } from "@/lib/domain/seo";
+import { repoFrom } from "@/lib/context";
+
+interface Props {
+  meta: MetaTags;
+  jsonLd?: Record<string, unknown>;
+  wide?: boolean;
+}
+const { meta, jsonLd, wide = false } = Astro.props;
+
+const repo = repoFrom(Astro.locals);
+const [settings, categories, pages] = await Promise.all([
+  repo.getSettings(),
+  repo.listCategories(),
+  repo.listMenuPages(),
+]);
+
+const currentPath = Astro.url.pathname;
+const ogImage = meta.image ?? undefined;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{meta.title}</title>
+    <meta name="description" content={meta.description} />
+    <link rel="canonical" href={meta.canonical} />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content={meta.ogType} />
+    <meta property="og:title" content={meta.title} />
+    <meta property="og:description" content={meta.description} />
+    <meta property="og:url" content={meta.canonical} />
+    <meta property="og:site_name" content={settings.title} />
+    {ogImage && <meta property="og:image" content={ogImage} />}
+    {meta.publishedTime && <meta property="article:published_time" content={meta.publishedTime} />}
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content={ogImage ? "summary_large_image" : "summary"} />
+    <meta name="twitter:title" content={meta.title} />
+    <meta name="twitter:description" content={meta.description} />
+    {ogImage && <meta name="twitter:image" content={ogImage} />}
+
+    <link rel="alternate" type="application/rss+xml" title={settings.title} href="/rss.xml" />
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap"
+      rel="stylesheet"
+    />
+
+    {jsonLd && (
+      <script type="application/ld+json" is:inline set:html={JSON.stringify(jsonLd).replace(/</g, "\\u003c")} />
+    )}
+  </head>
+  <body>
+    <SiteHeader settings={settings} categories={categories} pages={pages} currentPath={currentPath} />
+    <main class="container" style={wide ? "" : "max-width: var(--wide);"}>
+      <slot />
+    </main>
+    <SiteFooter settings={settings} />
+  </body>
+</html>

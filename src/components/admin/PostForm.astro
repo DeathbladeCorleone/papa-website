@@ -1,0 +1,88 @@
+---
+import Editor from "@/components/admin/Editor.tsx";
+import type { Category, PostWithRelations } from "@/lib/domain/types";
+
+interface Props {
+  post?: PostWithRelations | null;
+  categories: Category[];
+}
+const { post, categories } = Astro.props;
+const tagValue = post?.tags.map((t) => t.name).join(", ") ?? "";
+const isPublished = post?.status === "published";
+---
+
+<form method="POST" action="/api/admin/posts" class="stack">
+  {post && <input type="hidden" name="id" value={post.id} />}
+  <input type="hidden" name="_action" value="save" />
+
+  <div class="field">
+    <label for="title">Title</label>
+    <input type="text" id="title" name="title" required value={post?.title ?? ""} placeholder="A good, clear title" />
+  </div>
+
+  <div class="field">
+    <label>Body</label>
+    <Editor client:load name="body_html" initialHtml={post?.bodyHtml ?? ""} />
+  </div>
+
+  <div class="grid-2">
+    <div class="field">
+      <label for="category_id">Category</label>
+      <select id="category_id" name="category_id">
+        <option value="">— None —</option>
+        {categories.map((c) => (
+          <option value={c.id} selected={post?.categoryId === c.id}>{c.name}</option>
+        ))}
+      </select>
+    </div>
+    <div class="field">
+      <label for="new_category">…or add a new category</label>
+      <input type="text" id="new_category" name="new_category" placeholder="e.g. Travel" />
+    </div>
+  </div>
+
+  <div class="field">
+    <label for="tags">Tags <span class="muted">(comma separated)</span></label>
+    <input type="text" id="tags" name="tags" value={tagValue} placeholder="running, discipline, books" />
+  </div>
+
+  <div class="field">
+    <label for="cover_url">Cover image URL <span class="muted">(optional — also used as the social image)</span></label>
+    <input type="url" id="cover_url" name="cover_url" value={post?.coverUrl ?? ""} placeholder="https://…" />
+  </div>
+
+  <div class="field">
+    <label style="display:flex;align-items:center;gap:0.5rem;font-weight:400">
+      <input type="checkbox" name="featured" style="width:auto" checked={post?.featured ?? false} />
+      Feature this post on the homepage
+    </label>
+  </div>
+
+  <details style="margin:0.5rem 0">
+    <summary style="cursor:pointer;font-family:var(--sans);color:var(--ink-soft)">Advanced SEO (optional)</summary>
+    <div class="stack" style="margin-top:0.75rem">
+      <div class="field">
+        <label for="excerpt">Excerpt / meta description</label>
+        <textarea id="excerpt" name="excerpt" style="min-height:4rem" placeholder="Auto-generated from your text if left blank.">{post?.excerpt ?? ""}</textarea>
+      </div>
+      <div class="field">
+        <label for="seo_title">SEO title override</label>
+        <input type="text" id="seo_title" name="seo_title" value={post?.seoTitle ?? ""} placeholder="Defaults to the post title" />
+      </div>
+      <div class="field">
+        <label for="seo_description">SEO description override</label>
+        <input type="text" id="seo_description" name="seo_description" value={post?.seoDescription ?? ""} placeholder="Defaults to the excerpt" />
+      </div>
+    </div>
+  </details>
+
+  <div class="toolbar">
+    <button class="btn" type="submit" name="status" value="published">
+      {isPublished ? "Save & keep published" : "Publish"}
+    </button>
+    <button class="btn secondary" type="submit" name="status" value="draft">
+      {isPublished ? "Unpublish to draft" : "Save draft"}
+    </button>
+    {post && <a class="btn secondary" href={`/blog/${post.slug}`} target="_blank" rel="noopener">Preview ↗</a>}
+  </div>
+</form>

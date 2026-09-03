@@ -1,0 +1,29 @@
+---
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import { repoFrom } from "@/lib/context";
+import { formatDate } from "@/lib/format";
+
+const repo = repoFrom(Astro.locals);
+const [subscribers, pending] = await Promise.all([
+  repo.listSubscribers(),
+  repo.listCommentsByStatus("pending"),
+]);
+const csv = "data:text/csv;charset=utf-8," +
+  encodeURIComponent("email,subscribed_at\n" + subscribers.map((s) => `${s.email},${s.createdAt}`).join("\n"));
+---
+<AdminLayout title="Subscribers" pending={pending.length}>
+  <div class="toolbar" style="justify-content:space-between">
+    <h1 style="margin:0">Subscribers ({subscribers.length})</h1>
+    {subscribers.length > 0 && <a class="btn secondary" href={csv} download="subscribers.csv">Export CSV</a>}
+  </div>
+  <p class="muted small">Emails collected from the subscribe box. No emails are sent yet — export this list into a newsletter tool when you're ready.</p>
+  <table class="admin-table">
+    <thead><tr><th>Email</th><th>Since</th></tr></thead>
+    <tbody>
+      {subscribers.map((s) => (
+        <tr><td>{s.email}</td><td class="muted">{formatDate(s.createdAt)}</td></tr>
+      ))}
+      {subscribers.length === 0 && <tr><td colspan="2" class="muted">No subscribers yet.</td></tr>}
+    </tbody>
+  </table>
+</AdminLayout>

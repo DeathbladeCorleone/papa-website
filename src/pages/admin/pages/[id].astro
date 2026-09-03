@@ -1,0 +1,28 @@
+---
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import PageForm from "@/components/admin/PageForm.astro";
+import { repoFrom } from "@/lib/context";
+
+const { id } = Astro.params;
+const repo = repoFrom(Astro.locals);
+const [page, pending] = await Promise.all([
+  id ? repo.getPageById(id) : Promise.resolve(null),
+  repo.listCommentsByStatus("pending"),
+]);
+if (!page) Astro.response.status = 404;
+const saved = Astro.url.searchParams.get("saved");
+---
+<AdminLayout title={page ? `Edit: ${page.title}` : "Not found"} pending={pending.length}>
+  {page ? (
+    <>
+      <h1>Edit page</h1>
+      {saved && <p class="notice ok">Saved.</p>}
+      <PageForm page={page} />
+    </>
+  ) : (
+    <>
+      <h1>Page not found</h1>
+      <p><a class="btn secondary" href="/admin/pages">← Back to pages</a></p>
+    </>
+  )}
+</AdminLayout>

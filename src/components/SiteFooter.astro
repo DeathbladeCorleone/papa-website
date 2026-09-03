@@ -1,0 +1,17 @@
+---
+import type { SiteSettings } from "@/lib/domain/types";
+interface Props { settings: SiteSettings }
+const { settings } = Astro.props;
+const year = new Date().getFullYear();
+---
+
+<footer class="site-footer">
+  <div class="container">
+    <div class="grid-2">
+      <div>© {year} {settings.title}. All rights reserved.</div>
+      <div style="text-align:right">
+        <a href="/rss.xml">RSS</a> · <a href="/search">Search</a> · <a href="/contact">Contact</a>
+      </div>
+    </div>
+  </div>
+</footer>

@@ -1,0 +1,18 @@
+---
+import type { PostWithRelations } from "@/lib/domain/types";
+import PostMeta from "@/components/PostMeta.astro";
+
+interface Props { post: PostWithRelations }
+const { post } = Astro.props;
+---
+
+<article class="post-card">
+  {post.coverUrl && (
+    <a href={`/blog/${post.slug}`}>
+      <img class="cover" src={post.coverUrl} alt="" loading="lazy" />
+    </a>
+  )}
+  <PostMeta post={post} />
+  <h2><a href={`/blog/${post.slug}`}>{post.title}</a></h2>
+  <p class="excerpt">{post.excerpt}</p>
+</article>
