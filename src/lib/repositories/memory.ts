@@ -42,7 +42,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
 
 /**
  * In-memory implementation of BlogRepository. Deterministic and dependency-free
- * so it powers the test suite and local preview. Production uses the Supabase
+ * so it powers the test suite and local preview. Production uses the D1
  * implementation behind the same interface.
  */
 export class MemoryRepository implements BlogRepository {
@@ -350,6 +350,20 @@ export class MemoryRepository implements BlogRepository {
   async updateSettings(settings: Partial<SiteSettings>): Promise<SiteSettings> {
     this.settings = { ...this.settings, ...settings };
     return { ...this.settings };
+  }
+
+  private loginFailures: { ip: string; createdAt: string }[] = [];
+
+  async recordLoginFailure(ip: string): Promise<void> {
+    this.loginFailures.push({ ip, createdAt: now() });
+  }
+
+  async countLoginFailuresSince(ip: string, sinceIso: string): Promise<number> {
+    return this.loginFailures.filter((f) => f.ip === ip && f.createdAt >= sinceIso).length;
+  }
+
+  async clearLoginFailures(ip: string): Promise<void> {
+    this.loginFailures = this.loginFailures.filter((f) => f.ip !== ip);
   }
 }
 

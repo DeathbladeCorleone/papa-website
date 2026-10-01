@@ -1,0 +1,35 @@
+{
+  // Cloudflare Pages project config. The project name becomes the URL:
+  // https://pradeepsingh.pages.dev
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pradeepsingh",
+  "pages_build_output_dir": "./dist",
+  "compatibility_date": "2025-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "vars": {
+    "PUBLIC_SITE_URL": "https://pradeepsingh.pages.dev"
+  },
+
+  // Database. Replace database_id with the id printed by:
+  //   npx wrangler d1 create papa-website
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "papa-website",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // Image storage. Create with: npx wrangler r2 bucket create papa-website-media
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "papa-website-media"
+    }
+  ]
+
+  // Secrets (set in the dashboard or with `npx wrangler pages secret put NAME`):
+  //   ADMIN_EMAIL, ADMIN_PASSWORD_HASH, SESSION_SECRET
+}

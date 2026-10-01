@@ -1,8 +1,15 @@
 ---
 import "@/styles/theme.css";
-import { usingDemoData } from "@/lib/context";
+import { envFrom } from "@/lib/context";
+import { authConfig } from "@/lib/auth";
 const error = Astro.url.searchParams.get("error");
-const demo = usingDemoData(Astro.locals);
+const cfg = authConfig(envFrom(Astro.locals), import.meta.env.DEV);
+const devLogin = cfg?.devPassword != null;
+const messages: Record<string, string> = {
+  "1": "Incorrect email or password.",
+  locked: "Too many attempts. Please wait 15 minutes and try again.",
+  config: "Admin login isn't set up yet. Ask whoever runs this site to configure it.",
+};
 // Already logged in? Go to the dashboard.
 if (Astro.locals.admin) return Astro.redirect("/admin");
 ---
@@ -18,9 +25,10 @@ if (Astro.locals.admin) return Astro.redirect("/admin");
   <body style="display:grid;place-items:center;min-height:100vh">
     <main style="width:min(24rem,90vw)">
       <h1 style="text-align:center">Sign in</h1>
-      {error && <p class="notice err">Incorrect email or password.</p>}
-      {demo && (
-        <p class="notice info small">Demo mode — sign in with <code>admin@local</code> / <code>changeme</code>.</p>
+      {!cfg && <p class="notice err">{messages.config}</p>}
+      {cfg && error && <p class="notice err">{messages[error] ?? messages["1"]}</p>}
+      {devLogin && (
+        <p class="notice info small">Local development — sign in with <code>{cfg?.email}</code> / <code>changeme</code>.</p>
       )}
       <form method="POST" action="/api/admin/login" class="stack" style="margin-top:1rem">
         <div class="field">

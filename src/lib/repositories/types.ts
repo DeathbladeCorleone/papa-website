@@ -43,7 +43,7 @@ export interface CreateCommentInput {
 /**
  * Storage contract for the whole blog. The Astro app depends only on this
  * interface, so it can run against the in-memory repo (tests, local preview)
- * or Supabase (production) without changing a single page.
+ * or Cloudflare D1 (production) without changing a single page.
  */
 export interface BlogRepository {
   // Posts (public)
@@ -97,4 +97,9 @@ export interface BlogRepository {
   // Settings
   getSettings(): Promise<SiteSettings>;
   updateSettings(settings: Partial<SiteSettings>): Promise<SiteSettings>;
+
+  // Admin login rate limiting
+  recordLoginFailure(ip: string): Promise<void>;
+  countLoginFailuresSince(ip: string, sinceIso: string): Promise<number>;
+  clearLoginFailures(ip: string): Promise<void>;
 }

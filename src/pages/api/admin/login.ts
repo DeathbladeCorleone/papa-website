@@ -1,25 +1,41 @@
 import type { APIRoute } from "astro";
-import { signIn } from "@/lib/auth";
-import { envFrom } from "@/lib/context";
+import { authConfig, signIn, SESSION_COOKIE, SESSION_TTL_SECONDS } from "@/lib/auth";
+import { envFrom, repoFrom } from "@/lib/context";
 
 export const prerender = false;
 
-export const POST: APIRoute = async ({ request, cookies, url, locals }) => {
-  const form = await request.formData();
-  const email = String(form.get("email") ?? "");
-  const password = String(form.get("password") ?? "");
+const MAX_FAILURES = 10;
+const WINDOW_MS = 15 * 60 * 1000;
 
-  const result = await signIn(email, password, envFrom(locals));
-  if (!result) {
-    return new Response(null, { status: 303, headers: { Location: "/admin/login?error=1" } });
+function redirect(location: string): Response {
+  return new Response(null, { status: 303, headers: { Location: location } });
+}
+
+export const POST: APIRoute = async ({ request, cookies, url, locals }) => {
+  const cfg = authConfig(envFrom(locals), import.meta.env.DEV);
+  if (!cfg) return redirect("/admin/login?error=config");
+
+  const repo = repoFrom(locals);
+  const ip = request.headers.get("CF-Connecting-IP") ?? "local";
+  const since = new Date(Date.now() - WINDOW_MS).toISOString();
+  if ((await repo.countLoginFailuresSince(ip, since)) >= MAX_FAILURES) {
+    return redirect("/admin/login?error=locked");
   }
 
-  cookies.set("ps_session", result.token, {
+  const form = await request.formData();
+  const token = await signIn(String(form.get("email") ?? ""), String(form.get("password") ?? ""), cfg);
+  if (!token) {
+    await repo.recordLoginFailure(ip);
+    return redirect("/admin/login?error=1");
+  }
+
+  await repo.clearLoginFailures(ip);
+  cookies.set(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
     secure: url.protocol === "https:",
-    maxAge: 60 * 60 * 24 * 7,
+    maxAge: SESSION_TTL_SECONDS,
   });
-  return new Response(null, { status: 303, headers: { Location: "/admin" } });
+  return redirect("/admin");
 };

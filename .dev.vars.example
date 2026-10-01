@@ -1,0 +1,6 @@
+# Local secrets for `astro dev` / wrangler. Copy to .dev.vars (git-ignored).
+# Leave these unset to use the dev login: admin@local / changeme
+
+# ADMIN_EMAIL="you@example.com"
+# ADMIN_PASSWORD_HASH="pbkdf2$100000$..."   # from: npm run hash-password
+# SESSION_SECRET="at-least-32-random-characters"

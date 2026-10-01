@@ -6,13 +6,21 @@ export function normalizeQuery(raw: string): string {
   return (raw ?? "").replace(/\s+/g, " ").trim().slice(0, 100);
 }
 
+const MAX_TERMS = 10;
+
 /**
- * Build a Postgres `websearch_to_tsquery`-compatible string. websearch already
- * handles quotes/or/-, so we mostly pass it through after normalizing. Returns
- * "" for an empty query so callers can skip the search entirely.
+ * Turn free-form user input into a safe SQLite FTS5 MATCH expression.
+ * Only letter/number runs survive (so operators like AND, NEAR, -, *, ^, quotes
+ * and column filters can't be injected); each term is quoted and
+ * prefix-matched, and terms are implicitly AND-ed. Returns "" when nothing
+ * searchable remains, so callers can skip the query.
  */
-export function toTsQuery(raw: string): string {
-  return normalizeQuery(raw);
+export function toFtsQuery(raw: string): string {
+  const terms = normalizeQuery(raw).toLowerCase().match(/[\p{L}\p{M}\p{N}]+/gu) ?? [];
+  return terms
+    .slice(0, MAX_TERMS)
+    .map((t) => `"${t}"*`)
+    .join(" ");
 }
 
 /**
