@@ -24,14 +24,19 @@ const meta = pageMeta(
 
 <Base meta={meta}>
   {page ? (
-    <article class="measure">
-      <h1>{page.title}</h1>
-      <div class="prose" set:html={page.bodyHtml} style="margin-top:1.5rem" />
-    </article>
+    <section class="wrap rail simple-page">
+      <div class="label">{page.title}</div>
+      <article class="measure">
+        <h1>{page.title}</h1>
+        <div class="prose" set:html={page.bodyHtml} />
+      </article>
+    </section>
   ) : (
-    <div class="measure center" style="padding:4rem 0">
+    <section class="wrap simple-page">
       <h1>Page not found</h1>
-      <p><a class="btn secondary" href="/">← Back home</a></p>
-    </div>
+      <p class="empty">It may have been moved or removed.</p>
+      <a class="text-link" href="/">&larr; Back home</a>
+    </section>
   )}
+  <div class="page-footer-gap"></div>
 </Base>

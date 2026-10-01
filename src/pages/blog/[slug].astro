@@ -1,80 +1,119 @@
 ---
 import Base from "@/layouts/Base.astro";
-import PostMeta from "@/components/PostMeta.astro";
 import TableOfContents from "@/components/TableOfContents.astro";
 import ShareButtons from "@/components/ShareButtons.astro";
-import PostCard from "@/components/PostCard.astro";
 import Comments from "@/components/Comments.astro";
+import Subscribe from "@/components/Subscribe.astro";
 import { repoFrom, envFrom } from "@/lib/context";
 import { withHeadingIds } from "@/lib/domain/toc";
+import { readingTimeMinutes } from "@/lib/domain/reading-time";
 import { articleMeta, articleJsonLd, pageMeta } from "@/lib/domain/seo";
+import { formatDate, isoDate } from "@/lib/format";
 import { siteUrl } from "@/config/site";
 
-const { slug } = Astro.params;
+const { slug = "" } = Astro.params;
 const repo = repoFrom(Astro.locals);
-const settings = await repo.getSettings();
 const url = siteUrl(envFrom(Astro.locals));
-const post = slug ? await repo.getPublishedBySlug(slug) : null;
-
-if (!post) {
-  Astro.response.status = 404;
-}
+const [settings, post] = await Promise.all([repo.getSettings(), repo.getPublishedBySlug(slug)]);
+if (!post) Astro.response.status = 404;
 
 const rendered = post ? withHeadingIds(post.bodyHtml) : null;
-const [related, comments] = post
-  ? await Promise.all([repo.relatedPosts(post), repo.listApprovedForPost(post.id)])
-  : [[], []];
+const [similar, recentPosts, comments] = post
+  ? await Promise.all([repo.relatedPosts(post, 3), repo.listPublished({ limit: 5 }), repo.listApprovedForPost(post.id)])
+  : [[], [], []];
+// Prefer posts sharing a topic or tag; top up with the newest essays so there are three.
+const related = [...similar];
+for (const p of recentPosts) {
+  if (related.length >= 3) break;
+  if (p.id !== post?.id && !related.some((r) => r.id === p.id)) related.push(p);
+}
+const mins = post ? readingTimeMinutes(post.bodyHtml) : 0;
+const shareUrl = post ? `${url}/blog/${post.slug}` : url;
 
 const meta = post
   ? articleMeta(post, settings, url)
   : pageMeta({ path: Astro.url.pathname, title: "Not found" }, settings, url);
 const jsonLd = post ? articleJsonLd(post, settings, url) : undefined;
-const shareUrl = `${url}/blog/${post?.slug ?? ""}`;
 ---
 
 <Base meta={meta} jsonLd={jsonLd}>
-  {!post ? (
-    <div class="measure center" style="padding:4rem 0">
-      <h1>Post not found</h1>
-      <p class="muted">This essay may have been moved or unpublished.</p>
-      <p><a class="btn secondary" href="/">← Back home</a></p>
-    </div>
+  {!post || !rendered ? (
+    <section class="wrap simple-page">
+      <h1>Essay not found</h1>
+      <p class="empty">It may have been moved or unpublished.</p>
+      <a class="text-link" href="/blog">&larr; All essays</a>
+      <div class="page-footer-gap"></div>
+    </section>
   ) : (
-    <article>
-      <header class="measure" style="margin-bottom:1.5rem">
-        <h1>{post.title}</h1>
-        <PostMeta post={post} />
-      </header>
+    <>
+      <section class="wrap article-head">
+        <div class="inner">
+          {post.category && <a class="label accent" href={`/category/${post.category.slug}`}>{post.category.name}</a>}
+          <h1>{post.title}</h1>
+          <div class="meta">
+            By {settings.authorName} &middot; <time datetime={isoDate(post.publishedAt)}>{formatDate(post.publishedAt)}</time>
+            {mins > 0 && <> &middot; {mins} min read</>}
+          </div>
+        </div>
+      </section>
 
       {post.coverUrl && (
-        <figure style="margin:0 0 2rem">
-          <img src={post.coverUrl} alt="" style="width:100%;border-radius:var(--radius)" />
-        </figure>
-      )}
-
-      {rendered && <TableOfContents entries={rendered.toc} />}
-
-      <div class="prose measure" set:html={rendered?.html} style="margin-top:1.75rem" />
-
-      <div class="measure" style="margin-top:2.5rem">
-        {post.tags.length > 0 && (
-          <p style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1.25rem">
-            {post.tags.map((t) => <a class="tag-pill" href={`/tag/${t.slug}`}>#{t.name}</a>)}
-          </p>
-        )}
-        <ShareButtons url={shareUrl} title={post.title} />
-      </div>
-
-      {related.length > 0 && (
-        <section class="related measure">
-          <h2>Related reading</h2>
-          <div class="post-list">
-            {related.map((r) => <PostCard post={r} />)}
-          </div>
+        <section class="wrap article-cover">
+          <img src={post.coverUrl} alt="" fetchpriority="high" />
         </section>
       )}
 
-      <Comments post={post} comments={comments} />
-    </article>
+      <section class="wrap article-grid">
+        <aside class="article-aside">
+          <TableOfContents entries={rendered.toc} variant="aside" />
+          <div class:list={[{ "aside-share": rendered.toc.length >= 2 }]}>
+            <div class="label" style="border:0;padding-bottom:10px">Share</div>
+            <ShareButtons url={shareUrl} title={post.title} showLabel={false} />
+          </div>
+        </aside>
+
+        <div>
+          <TableOfContents entries={rendered.toc} variant="mobile" />
+          <article class="prose" set:html={rendered.html} />
+
+          {post.tags.length > 0 && (
+            <div class="article-tags">
+              <span class="label">Tags</span>
+              {post.tags.map((t) => <a class="pill" href={`/tag/${t.slug}`}>{t.name}</a>)}
+            </div>
+          )}
+          <ShareButtons url={shareUrl} title={post.title} class="share-mobile" />
+
+          <Comments post={post} comments={comments} />
+        </div>
+        <div class="spacer"></div>
+      </section>
+
+      {related.length > 0 && (
+        <div class="wrap">
+          <section class="related">
+            <div class="label">Related</div>
+            <div class="grid">
+              {related.map((r) => {
+                const m = readingTimeMinutes(r.bodyHtml);
+                return (
+                  <div>
+                    <div class="meta">
+                      {r.category?.name}{r.category && m > 0 && " · "}{m > 0 && `${m} min`}
+                    </div>
+                    <h3><a href={`/blog/${r.slug}`}>{r.title}</a></h3>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        </div>
+      )}
+
+      <div class="wrap">
+        <Subscribe variant="banner" />
+      </div>
+      <div class="page-footer-gap"></div>
+    </>
   )}
 </Base>

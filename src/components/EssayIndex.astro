@@ -1,0 +1,73 @@
+---
+import EssayEntry from "@/components/EssayEntry.astro";
+import type { Category, PostWithRelations } from "@/lib/domain/types";
+import { groupByYear } from "@/lib/format";
+
+interface Props {
+  title: string;
+  subtitle: string;
+  posts: PostWithRelations[];
+  categories: Category[];
+  /** Slug of the active category, or "all". Omit to hide the filter row. */
+  activeFilter?: string;
+  page: number;
+  totalPages: number;
+  /** Path the pagination links append ?page=N to. */
+  basePath: string;
+  emptyText?: string;
+}
+const { title, subtitle, posts, categories, activeFilter, page, totalPages, basePath, emptyText = "Nothing here yet." } = Astro.props;
+const groups = groupByYear(posts);
+const pageHref = (n: number) => (n <= 1 ? basePath : `${basePath}?page=${n}`);
+---
+
+<section class="wrap page-head">
+  <div>
+    <h1>{title}</h1>
+    <p class="sub">{subtitle}</p>
+  </div>
+  <form class="search-line" method="GET" action="/search" role="search">
+    <span class="search-icon" aria-hidden="true"></span>
+    <label class="visually-hidden" for="essay-search">Search essays</label>
+    <input type="search" id="essay-search" name="q" placeholder="Search essays" />
+  </form>
+</section>
+
+{activeFilter && categories.length > 0 && (
+  <nav class="wrap filter" aria-label="Filter by topic">
+    <span class="label">Filter</span>
+    <div class="options">
+      <a href="/blog" aria-current={activeFilter === "all" ? "page" : undefined}>All</a>
+      {categories.map((c) => (
+        <a href={`/category/${c.slug}`} aria-current={activeFilter === c.slug ? "page" : undefined}>{c.name}</a>
+      ))}
+    </div>
+  </nav>
+)}
+
+{groups.length === 0 ? (
+  <div class="wrap rail year-group">
+    <div></div>
+    <p class="empty">{emptyText}</p>
+  </div>
+) : (
+  groups.map((g) => (
+    <section class="wrap rail year-group">
+      <div class="label">{g.year}</div>
+      <div class="entries">
+        {g.items.map((post) => <EssayEntry post={post} dateStyle="monthDay" />)}
+      </div>
+    </section>
+  ))
+)}
+
+{totalPages > 1 && (
+  <div class="wrap">
+    <nav class="pagination" aria-label="Pagination">
+      {page > 1 ? <a href={pageHref(page - 1)}>&larr; Newer</a> : <span class="disabled">&larr; Newer</span>}
+      <span class="where">Page {page} of {totalPages}</span>
+      {page < totalPages ? <a href={pageHref(page + 1)}>Older &rarr;</a> : <span class="disabled">Older &rarr;</span>}
+    </nav>
+  </div>
+)}
+<div class="page-footer-gap"></div>

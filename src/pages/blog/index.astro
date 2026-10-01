@@ -1,35 +1,33 @@
 ---
 import Base from "@/layouts/Base.astro";
-import PostCard from "@/components/PostCard.astro";
+import EssayIndex from "@/components/EssayIndex.astro";
 import { repoFrom, envFrom } from "@/lib/context";
 import { pageMeta } from "@/lib/domain/seo";
 import { siteUrl, SITE } from "@/config/site";
 
 const repo = repoFrom(Astro.locals);
-const settings = await repo.getSettings();
 const page = Math.max(1, Number(Astro.url.searchParams.get("page") ?? "1") || 1);
-const offset = (page - 1) * SITE.pageSize;
-
-const [posts, total] = await Promise.all([
-  repo.listPublished({ limit: SITE.pageSize, offset }),
+const [settings, posts, total, categories] = await Promise.all([
+  repo.getSettings(),
+  repo.listPublished({ limit: SITE.pageSize, offset: (page - 1) * SITE.pageSize }),
   repo.countPublished(),
+  repo.listCategories(),
 ]);
 const totalPages = Math.max(1, Math.ceil(total / SITE.pageSize));
-const meta = pageMeta({ path: "/blog", title: "All posts" }, settings, siteUrl(envFrom(Astro.locals)));
+const subtitle = total === 0 ? "No essays yet." : `${total} ${total === 1 ? "essay" : "essays"}, newest first.`;
+const meta = pageMeta({ path: "/blog", title: "All essays" }, settings, siteUrl(envFrom(Astro.locals)));
 ---
 
 <Base meta={meta}>
-  <h1 class="measure">All posts</h1>
-  {posts.length > 0 ? (
-    <div class="post-list measure">{posts.map((p) => <PostCard post={p} />)}</div>
-  ) : (
-    <p class="muted measure">No posts yet.</p>
-  )}
-  {totalPages > 1 && (
-    <nav class="pagination measure" aria-label="Pagination">
-      {page > 1 ? <a href={`/blog?page=${page - 1}`}>← Newer</a> : <span></span>}
-      <span class="muted">Page {page} of {totalPages}</span>
-      {page < totalPages ? <a href={`/blog?page=${page + 1}`}>Older →</a> : <span></span>}
-    </nav>
-  )}
+  <EssayIndex
+    title="All essays"
+    subtitle={subtitle}
+    posts={posts}
+    categories={categories}
+    activeFilter="all"
+    page={page}
+    totalPages={totalPages}
+    basePath="/blog"
+    emptyText="The first essay is on its way."
+  />
 </Base>

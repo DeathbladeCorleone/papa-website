@@ -1,0 +1,24 @@
+---
+import type { PostWithRelations } from "@/lib/domain/types";
+import { formatDate, formatMonthDay, isoDate } from "@/lib/format";
+import { readingTimeMinutes } from "@/lib/domain/reading-time";
+
+interface Props {
+  post: PostWithRelations;
+  /** "monthDay" when the list is already grouped under a year heading. */
+  dateStyle?: "full" | "monthDay";
+}
+const { post, dateStyle = "full" } = Astro.props;
+const date = dateStyle === "monthDay" ? formatMonthDay(post.publishedAt) : formatDate(post.publishedAt);
+const mins = readingTimeMinutes(post.bodyHtml);
+---
+
+<article class="entry">
+  <div class="meta">
+    {date && <time datetime={isoDate(post.publishedAt)}>{date}</time>}
+    {post.category && <> &middot; <a href={`/category/${post.category.slug}`}>{post.category.name}</a></>}
+    {mins > 0 && <> &middot; {mins} min</>}
+  </div>
+  <h2><a href={`/blog/${post.slug}`}>{post.title}</a></h2>
+  {post.excerpt && <p class="excerpt">{post.excerpt}</p>}
+</article>

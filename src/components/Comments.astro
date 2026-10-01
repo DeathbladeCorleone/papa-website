@@ -8,92 +8,78 @@ interface Props { post: PostWithRelations; comments: Comment[] }
 const { post, comments } = Astro.props;
 const threads = buildThreads(comments);
 const count = approvedCount(comments);
-
 const status = Astro.url.searchParams.get("comment");
 ---
 
-<section class="comments measure" id="comments">
-  <h2>{count === 0 ? "Comments" : `${count} comment${count === 1 ? "" : "s"}`}</h2>
-
-  {status === "pending" && (
-    <p class="notice ok">Thank you — your comment has been submitted and will appear once approved.</p>
-  )}
-  {status === "error" && (
-    <p class="notice err">Sorry, your comment could not be submitted. Please check your details and try again.</p>
-  )}
-
-  {threads.length === 0 && status !== "pending" && (
-    <p class="muted">Be the first to comment.</p>
-  )}
-
-  <div class="thread-list">
-    {threads.map((t) => (
-      <div class={`comment${t.isAuthor ? " is-author" : ""}`} id={`c-${t.id}`}>
-        <div>
-          <span class="who">{t.authorName}</span>
-          {t.isAuthor && <span class="badge">Author</span>}
-          <time class="when" datetime={isoDate(t.createdAt)}>{formatDate(t.createdAt)}</time>
-        </div>
-        <div class="body" set:html={renderCommentBody(t.body)} />
-        <button class="btn secondary small reply-btn" data-parent={t.id} data-name={t.authorName} type="button">Reply</button>
-        {t.replies.length > 0 && (
-          <div class="replies">
-            {t.replies.map((r) => (
-              <div class={`comment${r.isAuthor ? " is-author" : ""}`} id={`c-${r.id}`}>
-                <div>
-                  <span class="who">{r.authorName}</span>
-                  {r.isAuthor && <span class="badge">Author</span>}
-                  <time class="when" datetime={isoDate(r.createdAt)}>{formatDate(r.createdAt)}</time>
-                </div>
-                <div class="body" set:html={renderCommentBody(r.body)} />
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    ))}
+<section class="comments" id="comments">
+  <div class="comments-head">
+    <div class="label">Comments{count > 0 && <> &middot; {count}</>}</div>
+    <div class="note">Moderated — new comments appear once approved.</div>
   </div>
 
-  <h3 id="comment-form">Leave a comment</h3>
-  <p class="small muted" id="reply-hint" hidden></p>
-  <form method="POST" action="/api/comments" class="stack">
+  {status === "pending" && <p class="notice ok">Thank you — your comment will appear once it has been read.</p>}
+  {status === "error" && <p class="notice err">Sorry, that didn’t go through. Please check your name, email and comment.</p>}
+
+  {threads.map((t, i) => (
+    <>
+      {i > 0 && <div class="comment-divider"></div>}
+      <div class="comment" id={`c-${t.id}`}>
+        <div class="who">
+          {t.authorName} &middot; <time datetime={isoDate(t.createdAt)}>{formatDate(t.createdAt)}</time>
+          {t.isAuthor && <> &middot; Author</>}
+        </div>
+        <div class="body" set:html={renderCommentBody(t.body)} />
+        {t.replies.map((r) => (
+          <div class:list={["reply", { "is-author": r.isAuthor }]} id={`c-${r.id}`}>
+            <div class="who">
+              <span class="name">{r.authorName}</span>
+              {r.isAuthor && <> &middot; Author</>} &middot; <time datetime={isoDate(r.createdAt)}>{formatDate(r.createdAt)}</time>
+            </div>
+            <div class="body" set:html={renderCommentBody(r.body)} />
+          </div>
+        ))}
+        <button class="reply-btn" type="button" data-parent={t.id} data-name={t.authorName}>Reply</button>
+      </div>
+    </>
+  ))}
+
+  <div class="comment-divider"></div>
+
+  <form class="comment-form" id="comment-form" method="POST" action="/api/comments">
+    <div class="label">Leave a comment</div>
+    <p class="reply-hint" id="reply-hint" hidden></p>
     <input type="hidden" name="post_id" value={post.id} />
     <input type="hidden" name="parent_id" id="parent_id" value="" />
-    <!-- Honeypot: bots fill this, humans never see it -->
     <div class="honeypot" aria-hidden="true">
       <label>Website<input type="text" name="website" tabindex="-1" autocomplete="off" /></label>
     </div>
-    <div class="grid-2">
-      <div class="field">
-        <label for="author_name">Name</label>
-        <input type="text" id="author_name" name="author_name" required minlength="2" maxlength="80" />
-      </div>
-      <div class="field">
-        <label for="author_email">Email <span class="muted">(never shown)</span></label>
-        <input type="email" id="author_email" name="author_email" required />
-      </div>
+    <div class="row">
+      <label class="visually-hidden" for="author_name">Name</label>
+      <input type="text" id="author_name" name="author_name" placeholder="Name" required minlength="2" maxlength="80" />
+      <label class="visually-hidden" for="author_email">Email</label>
+      <input type="email" id="author_email" name="author_email" placeholder="Email (not published)" required />
     </div>
-    <div class="field">
-      <label for="body">Comment</label>
-      <textarea id="body" name="body" required minlength="2" maxlength="5000"></textarea>
+    <label class="visually-hidden" for="body">Comment</label>
+    <textarea id="body" name="body" rows="4" placeholder="Your comment" required minlength="2" maxlength="5000"></textarea>
+    <div class="actions">
+      <button class="btn" type="submit">Post comment</button>
+      <span class="hint">Your email stays private. Comments are read before they appear.</span>
     </div>
-    <button class="btn" type="submit">Post comment</button>
   </form>
 </section>
 
 <script is:inline>
   document.querySelectorAll(".reply-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const parent = btn.getAttribute("data-parent") || "";
-      const name = btn.getAttribute("data-name") || "";
       const input = document.getElementById("parent_id");
       const hint = document.getElementById("reply-hint");
-      if (input) input.value = parent;
+      if (input) input.value = btn.getAttribute("data-parent") || "";
       if (hint) {
-        hint.textContent = "Replying to " + name + " — clear the form to comment at the top level.";
+        hint.textContent = "Replying to " + (btn.getAttribute("data-name") || "") + ".";
         hint.hidden = false;
       }
-      document.getElementById("comment-form")?.scrollIntoView({ behavior: "smooth" });
+      document.getElementById("comment-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.getElementById("author_name")?.focus({ preventScroll: true });
     });
   });
 </script>

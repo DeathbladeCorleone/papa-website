@@ -1,49 +1,94 @@
 ---
 import Base from "@/layouts/Base.astro";
-import PostCard from "@/components/PostCard.astro";
-import PostMeta from "@/components/PostMeta.astro";
+import EssayEntry from "@/components/EssayEntry.astro";
 import Subscribe from "@/components/Subscribe.astro";
 import { repoFrom, envFrom } from "@/lib/context";
 import { pageMeta } from "@/lib/domain/seo";
+import { excerptFromHtml } from "@/lib/domain/excerpt";
+import { readingTimeMinutes } from "@/lib/domain/reading-time";
+import { formatDate, isoDate } from "@/lib/format";
 import { siteUrl } from "@/config/site";
-import { SITE } from "@/config/site";
 
+const RECENT = 5;
 const repo = repoFrom(Astro.locals);
-const [settings, featured, recent] = await Promise.all([
+const [settings, featured, latest, categories, about] = await Promise.all([
   repo.getSettings(),
   repo.getFeatured(),
-  repo.listPublished({ limit: SITE.pageSize + 1 }),
+  repo.listPublished({ limit: RECENT + 1 }),
+  repo.listCategories(),
+  repo.getPublishedPageBySlug("about"),
 ]);
 
-// Exclude the featured post from the "recent" river to avoid duplication.
-const rest = recent.filter((p) => p.id !== featured?.id).slice(0, SITE.pageSize);
+const recent = latest.filter((p) => p.id !== featured?.id).slice(0, RECENT);
+const counts = await Promise.all(categories.map((c) => repo.countPublished({ categorySlug: c.slug })));
+const topics = categories.map((c, i) => ({ ...c, count: counts[i] })).filter((c) => c.count > 0);
+const aboutText = about ? excerptFromHtml(about.bodyHtml, 260) : "";
+const featuredMins = featured ? readingTimeMinutes(featured.bodyHtml) : 0;
+
 const meta = pageMeta({ path: "/" }, settings, siteUrl(envFrom(Astro.locals)));
 ---
 
-<Base meta={meta}>
-  {featured && (
-    <section class="featured">
-      <span class="kicker">Featured</span>
-      <PostMeta post={featured} />
-      <h2><a href={`/blog/${featured.slug}`} style="text-decoration:none;color:inherit">{featured.title}</a></h2>
-      <p class="excerpt" style="font-size:1.2rem">{featured.excerpt}</p>
-      <a class="btn secondary" href={`/blog/${featured.slug}`}>Read the essay →</a>
+<Base meta={meta} home>
+  {featured ? (
+    <section class="wrap rail featured">
+      <div class="label accent">Featured</div>
+      <div class="measure">
+        <h1><a href={`/blog/${featured.slug}`}>{featured.title}</a></h1>
+        <div class="meta">
+          <time datetime={isoDate(featured.publishedAt)}>{formatDate(featured.publishedAt)}</time>
+          {featured.category && <> &middot; <a href={`/category/${featured.category.slug}`}>{featured.category.name}</a></>}
+          {featuredMins > 0 && <> &middot; {featuredMins} min read</>}
+        </div>
+        {featured.excerpt && <p class="lede">{featured.excerpt}</p>}
+        <a class="text-link" href={`/blog/${featured.slug}`}>Read the essay &rarr;</a>
+      </div>
+    </section>
+  ) : (
+    <section class="wrap rail featured">
+      <div class="label">Welcome</div>
+      <p class="empty">The first essay is on its way. Check back soon.</p>
     </section>
   )}
 
-  {rest.length > 0 ? (
-    <div class="post-list measure">
-      {rest.map((post) => <PostCard post={post} />)}
+  {recent.length > 0 && (
+    <div class="ruled">
+      <section class="wrap rail home-section">
+        <div class="label">Recent</div>
+        <div>
+          <div class="entries">
+            {recent.map((post) => <EssayEntry post={post} />)}
+          </div>
+          <a class="text-link caps more" href="/blog">All essays</a>
+        </div>
+      </section>
     </div>
-  ) : (
-    <p class="muted measure">No posts yet. Check back soon.</p>
   )}
 
-  {recent.length > SITE.pageSize && (
-    <p class="center" style="margin-top:2.5rem">
-      <a class="btn secondary" href="/blog">All posts →</a>
-    </p>
+  {topics.length > 0 && (
+    <div class="ruled">
+      <section class="wrap rail home-section tight">
+        <div class="label">Browse</div>
+        <div class="pills">
+          {topics.map((t) => (
+            <a class="pill" href={`/category/${t.slug}`}>{t.name}<span class="count">{t.count}</span></a>
+          ))}
+        </div>
+      </section>
+    </div>
   )}
 
-  <Subscribe />
+  <div class="ruled">
+    <section class="wrap about-subscribe">
+      <div class="label">{aboutText ? "About" : ""}</div>
+      <div class="about">
+        {aboutText && (
+          <>
+            <p>{aboutText}</p>
+            <a class="text-link" href="/about">More about me &rarr;</a>
+          </>
+        )}
+      </div>
+      <Subscribe variant="card" />
+    </section>
+  </div>
 </Base>

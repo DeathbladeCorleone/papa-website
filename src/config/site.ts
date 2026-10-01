@@ -4,7 +4,7 @@ export const SITE = {
   defaultTitle: "Pradeep Singh",
   locale: "en",
   /** Posts per page on listing pages. */
-  pageSize: 8,
+  pageSize: 10,
 };
 
 /** Resolve the public site URL from env, with a sensible default. */

@@ -1,15 +1,20 @@
 ---
 import type { TocEntry } from "@/lib/domain/toc";
-interface Props { entries: TocEntry[] }
-const { entries } = Astro.props;
+interface Props { entries: TocEntry[]; variant: "aside" | "mobile" }
+const { entries, variant } = Astro.props;
 ---
-{entries.length >= 3 && (
-  <nav class="toc measure" aria-label="Table of contents">
-    <strong>On this page</strong>
-    <ul>
-      {entries.map((e) => (
-        <li class={`level-${e.level}`}><a href={`#${e.id}`}>{e.text}</a></li>
-      ))}
-    </ul>
+{entries.length >= 2 && (variant === "aside" ? (
+  <nav aria-label="Contents">
+    <div class="label">Contents</div>
+    <div class="toc-links">
+      {entries.map((e) => <a class={`level-${e.level}`} href={`#${e.id}`}>{e.text}</a>)}
+    </div>
   </nav>
-)}
+) : (
+  <details class="toc-mobile">
+    <summary class="label">Contents &nbsp;&darr;</summary>
+    <div class="toc-links">
+      {entries.map((e) => <a class={`level-${e.level}`} href={`#${e.id}`}>{e.text}</a>)}
+    </div>
+  </details>
+))}

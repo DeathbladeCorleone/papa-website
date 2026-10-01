@@ -4,36 +4,34 @@ interface Props {
   settings: SiteSettings;
   categories: Category[];
   pages: Page[];
-  currentPath?: string;
+  currentPath: string;
+  home?: boolean;
 }
-const { settings, categories, pages, currentPath = "" } = Astro.props;
-const isCurrent = (href: string) =>
-  href === currentPath || (href !== "/" && currentPath.startsWith(href));
+const { settings, categories, pages, currentPath, home = false } = Astro.props;
+const current = (href: string) =>
+  (href === "/" ? currentPath === "/" : currentPath === href || currentPath.startsWith(`${href}/`)) ? "page" : undefined;
+// Contact always has its own nav item, so skip a CMS page with the same slug.
+const menuPages = pages.filter((p) => p.slug !== "contact");
 ---
 
-<header class="site-header">
-  <div class="container bar">
-    <a class="brand" href="/">
-      {settings.title}
-      {settings.tagline && <small>{settings.tagline}</small>}
-    </a>
+<header class:list={["site-header", { "is-home": home }]}>
+  <div class="wrap bar">
+    <div>
+      <a class="wordmark" href="/">{settings.title}</a>
+      {home && settings.tagline && <div class="tagline">{settings.tagline}</div>}
+    </div>
     <nav class="nav" aria-label="Primary">
-      <a href="/" aria-current={currentPath === "/" ? "page" : undefined}>Home</a>
+      <a href="/" aria-current={current("/")}>Home</a>
+      <a href="/blog" aria-current={current("/blog")}>Essays</a>
       {categories.map((c) => (
-        <a
-          href={`/category/${c.slug}`}
-          aria-current={isCurrent(`/category/${c.slug}`) ? "page" : undefined}
-        >
-          {c.name}
-        </a>
+        <a class="cat-link" href={`/category/${c.slug}`} aria-current={current(`/category/${c.slug}`)}>{c.name}</a>
       ))}
-      {pages.map((p) => (
-        <a href={`/${p.slug}`} aria-current={isCurrent(`/${p.slug}`) ? "page" : undefined}>
-          {p.title}
-        </a>
+      {menuPages.map((p) => (
+        <a href={`/${p.slug}`} aria-current={current(`/${p.slug}`)}>{p.title}</a>
       ))}
-      <a class="search-link" href="/search" aria-label="Search">
-        <span aria-hidden="true">⌕</span> Search
+      <a href="/contact" aria-current={current("/contact")}>Contact</a>
+      <a class="search-link" href="/search" aria-current={current("/search")}>
+        <span class="search-icon" aria-hidden="true"></span><span>Search</span>
       </a>
     </nav>
   </div>

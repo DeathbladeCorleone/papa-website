@@ -13,15 +13,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const rawBack = String(form.get("return_to") ?? "/");
   const back = rawBack.startsWith("/") && !rawBack.startsWith("//") ? rawBack : "/";
 
-  if (honeypot) return redirect(`${back}?subscribed=1`);
-  if (!EMAIL_RE.test(email)) return redirect(`${back}?subscribed=error`);
+  if (honeypot) return redirect(`${back}?subscribed=1#subscribe`);
+  if (!EMAIL_RE.test(email)) return redirect(`${back}?subscribed=error#subscribe`);
 
   try {
     await repoFrom(locals).addSubscriber(email);
     // Always report success — whether newly added or already on the list.
-    return redirect(`${back}?subscribed=1`);
+    return redirect(`${back}?subscribed=1#subscribe`);
   } catch {
-    return redirect(`${back}?subscribed=error`);
+    return redirect(`${back}?subscribed=error#subscribe`);
   }
 };
 

@@ -8,9 +8,10 @@ import { repoFrom } from "@/lib/context";
 interface Props {
   meta: MetaTags;
   jsonLd?: Record<string, unknown>;
-  wide?: boolean;
+  /** The home page gets the larger masthead with the tagline. */
+  home?: boolean;
 }
-const { meta, jsonLd, wide = false } = Astro.props;
+const { meta, jsonLd, home = false } = Astro.props;
 
 const repo = repoFrom(Astro.locals);
 const [settings, categories, pages] = await Promise.all([
@@ -20,7 +21,8 @@ const [settings, categories, pages] = await Promise.all([
 ]);
 
 const currentPath = Astro.url.pathname;
-const ogImage = meta.image ?? undefined;
+// Social cards need absolute image URLs; uploads are stored as /media/... paths.
+const ogImage = meta.image ? new URL(meta.image, meta.canonical).href : undefined;
 ---
 
 <!doctype html>
@@ -53,7 +55,7 @@ const ogImage = meta.image ?? undefined;
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300..700;1,8..60,300..600&family=Inter:wght@400;500&display=swap"
       rel="stylesheet"
     />
 
@@ -62,8 +64,8 @@ const ogImage = meta.image ?? undefined;
     )}
   </head>
   <body>
-    <SiteHeader settings={settings} categories={categories} pages={pages} currentPath={currentPath} />
-    <main class="container" style={wide ? "" : "max-width: var(--wide);"}>
+    <SiteHeader settings={settings} categories={categories} pages={pages} currentPath={currentPath} home={home} />
+    <main>
       <slot />
     </main>
     <SiteFooter settings={settings} />

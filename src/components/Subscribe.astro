@@ -1,22 +1,44 @@
 ---
-interface Props { returnTo?: string }
-const { returnTo = Astro.url.pathname } = Astro.props;
+interface Props {
+  /** "card" sits beside the About blurb on the home page; "banner" spans the article footer. */
+  variant?: "card" | "banner";
+}
+const { variant = "card" } = Astro.props;
+const returnTo = Astro.url.pathname;
 const status = Astro.url.searchParams.get("subscribed");
+const blurb = "Get an occasional note when there’s something new. No schedule, no noise.";
 ---
-<section class="measure" style="margin-top:3rem;padding:1.75rem;background:var(--paper-raised);border:1px solid var(--rule);border-radius:var(--radius)">
-  <h3 style="margin-top:0">Subscribe</h3>
-  <p class="small muted" style="margin-top:0.25rem">Get an occasional note when there's something new. No spam, ever.</p>
-  {status === "1" && <p class="notice ok">You're on the list — thank you.</p>}
-  {status === "error" && <p class="notice err">Please enter a valid email address.</p>}
-  <form method="POST" action="/api/subscribe" style="display:flex;gap:0.6rem;flex-wrap:wrap;align-items:flex-end">
-    <input type="hidden" name="return_to" value={returnTo} />
-    <div class="honeypot" aria-hidden="true">
-      <label>Website<input type="text" name="website" tabindex="-1" autocomplete="off" /></label>
+
+{variant === "card" ? (
+  <div class="card subscribe-card" id="subscribe">
+    <div class="label accent">Subscribe</div>
+    <p>{blurb}</p>
+    {status === "1" && <p class="notice ok">You’re on the list — thank you.</p>}
+    {status === "error" && <p class="notice err">Please enter a valid email address.</p>}
+    <form method="POST" action="/api/subscribe">
+      <input type="hidden" name="return_to" value={returnTo} />
+      <div class="honeypot" aria-hidden="true"><label>Website<input type="text" name="website" tabindex="-1" autocomplete="off" /></label></div>
+      <label class="visually-hidden" for="sub-email-card">Email</label>
+      <input type="email" id="sub-email-card" name="email" required placeholder="you@example.com" />
+      <button class="btn" type="submit">Subscribe</button>
+    </form>
+  </div>
+) : (
+  <section class="subscribe-banner" id="subscribe">
+    <div class="label accent">Subscribe</div>
+    <div>
+      <div class="card">
+        <p>{blurb}</p>
+        <form method="POST" action="/api/subscribe">
+          <input type="hidden" name="return_to" value={returnTo} />
+          <div class="honeypot" aria-hidden="true"><label>Website<input type="text" name="website" tabindex="-1" autocomplete="off" /></label></div>
+          <label class="visually-hidden" for="sub-email-banner">Email</label>
+          <input type="email" id="sub-email-banner" name="email" required placeholder="you@example.com" />
+          <button class="btn" type="submit">Subscribe</button>
+        </form>
+      </div>
+      {status === "1" && <p class="notice ok">You’re on the list — thank you.</p>}
+      {status === "error" && <p class="notice err">Please enter a valid email address.</p>}
     </div>
-    <div class="field" style="flex:1;min-width:220px;margin:0">
-      <label for="sub-email">Email</label>
-      <input type="email" id="sub-email" name="email" required placeholder="you@example.com" />
-    </div>
-    <button class="btn" type="submit">Subscribe</button>
-  </form>
-</section>
+  </section>
+)}

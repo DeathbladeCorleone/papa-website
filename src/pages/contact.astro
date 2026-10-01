@@ -13,36 +13,37 @@ const status = Astro.url.searchParams.get("sent");
 ---
 
 <Base meta={meta}>
-  <div class="measure">
-    <h1>{cms?.title ?? "Contact"}</h1>
-    {cms ? (
-      <div class="prose" set:html={cms.bodyHtml} style="margin:1.25rem 0 2rem" />
-    ) : (
-      <p class="muted" style="margin:1rem 0 2rem">Have a question or a note? Send it along.</p>
-    )}
+  <section class="wrap rail simple-page">
+    <div class="label">Contact</div>
+    <div class="measure">
+      <h1>{cms?.title ?? "Get in touch"}</h1>
+      {cms ? (
+        <div class="prose" set:html={cms.bodyHtml} />
+      ) : (
+        <p class="lede-sans" style="margin:20px 0 0;font-size:19px;line-height:1.6;color:var(--ink-soft)">Have a question, a thought on an essay, or just want to say hello? Write below — it comes straight to me.</p>
+      )}
 
-    {status === "1" && <p class="notice ok">Thank you — your message has been sent.</p>}
-    {status === "error" && <p class="notice err">Something went wrong. Please try again.</p>}
+      {status === "1" && <p class="notice ok">Thank you — your message has been sent.</p>}
+      {status === "error" && <p class="notice err">Something went wrong. Please check the form and try again.</p>}
 
-    <form method="POST" action="/api/contact" class="stack">
-      <div class="honeypot" aria-hidden="true">
-        <label>Website<input type="text" name="website" tabindex="-1" autocomplete="off" /></label>
-      </div>
-      <div class="grid-2">
-        <div class="field">
-          <label for="name">Name</label>
-          <input type="text" id="name" name="name" required minlength="2" maxlength="80" />
+      <form method="POST" action="/api/contact" class="comment-form" style="margin-top:36px;max-width:none">
+        <div class="honeypot" aria-hidden="true">
+          <label>Website<input type="text" name="website" tabindex="-1" autocomplete="off" /></label>
         </div>
-        <div class="field">
-          <label for="email">Email</label>
-          <input type="email" id="email" name="email" required />
+        <div class="row" style="margin-top:0">
+          <label class="visually-hidden" for="name">Name</label>
+          <input type="text" id="name" name="name" placeholder="Name" required minlength="2" maxlength="80" />
+          <label class="visually-hidden" for="email">Email</label>
+          <input type="email" id="email" name="email" placeholder="Email" required />
         </div>
-      </div>
-      <div class="field">
-        <label for="body">Message</label>
-        <textarea id="body" name="body" required minlength="2" maxlength="5000"></textarea>
-      </div>
-      <button class="btn" type="submit">Send message</button>
-    </form>
-  </div>
+        <label class="visually-hidden" for="body">Message</label>
+        <textarea id="body" name="body" rows="6" placeholder="Your message" required minlength="2" maxlength="5000"></textarea>
+        <div class="actions">
+          <button class="btn" type="submit">Send message</button>
+          <span class="hint">Your email is only used to reply to you.</span>
+        </div>
+      </form>
+    </div>
+  </section>
+  <div class="page-footer-gap"></div>
 </Base>
