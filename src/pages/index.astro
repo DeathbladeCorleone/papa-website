@@ -21,15 +21,29 @@ const [settings, featured, pages, categories, about] = await Promise.all([
 const exclude = featured ? [featured.id] : [];
 const layout = settings.homeLayout;
 const section = Object.fromEntries(layout.sections.map((x) => [x.key, x])) as Record<HomeSectionKey, HomeSection>;
-const [mostRead, newest, counts] = await Promise.all([
-  repo.listMostRead(layout.mostReadCount, exclude),
+const showing = (key: HomeSectionKey) => section[key]?.visible !== false;
+const [newest, counts] = await Promise.all([
   repo.listPublished({ limit: layout.latestCount + 1 }),
   Promise.all(categories.map((c) => repo.countPublished({ categorySlug: c.slug }))),
 ]);
 const latest = newest.filter((p) => !exclude.includes(p.id)).slice(0, layout.latestCount);
+// Never show the same essay twice on the page: Most read skips the hero and
+// (when the Latest section is on) the essays already listed there.
+const shownIds = [...exclude, ...(showing("latest") ? latest.map((p) => p.id) : [])];
+const mostRead = await repo.listMostRead(layout.mostReadCount, shownIds);
 const topics = categories.map((c, i) => ({ ...c, count: counts[i] })).filter((c) => c.count > 0);
 const [aboutLead = "", aboutBody = ""] = about ? paragraphs(about.bodyHtml) : [];
 const mins = (html: string) => readingTimeMinutes(html);
+
+// Sections that are switched on AND have something to show, in Pradeep's order.
+const hasContent: Record<HomeSectionKey, boolean> = {
+  mostRead: mostRead.length > 0,
+  subscribe: true,
+  about: Boolean(aboutLead || settings.authorPhotoUrl),
+  latest: latest.length > 0,
+  topics: topics.length > 0,
+};
+const blocks = layout.sections.filter((x) => x.visible && hasContent[x.key]);
 
 const meta = pageMeta({ path: "/" }, settings, siteUrl(envFrom(Astro.locals)));
 ---
@@ -68,9 +82,10 @@ const meta = pageMeta({ path: "/" }, settings, siteUrl(envFrom(Astro.locals)));
     </div>
   </section>
 
-  {layout.sections.filter((x) => x.visible).map((x) => (
+  <div class="home-secs">
+  {blocks.map((x) => (
     x.key === "mostRead" ? (
-      <Fragment>
+      <div class={`home-sec home-sec--${x.key}`}>
         {mostRead.length > 0 && (
           <section class="wrap home-block" id="most-read">
             <div class="block-head">
@@ -92,13 +107,13 @@ const meta = pageMeta({ path: "/" }, settings, siteUrl(envFrom(Astro.locals)));
             </ol>
           </section>
         )}
-      </Fragment>
+      </div>
     ) : x.key === "subscribe" ? (
-      <Fragment>
+      <div class={`home-sec home-sec--${x.key}`}>
         <div class="wrap home-subscribe"><Subscribe variant="band" /></div>
-      </Fragment>
+      </div>
     ) : x.key === "about" ? (
-      <Fragment>
+      <div class={`home-sec home-sec--${x.key}`}>
         {(aboutLead || settings.authorPhotoUrl) && (
           <section class:list={["wrap", "about-block", { "no-photo": !settings.authorPhotoUrl }]}>
             {settings.authorPhotoUrl && (
@@ -112,9 +127,9 @@ const meta = pageMeta({ path: "/" }, settings, siteUrl(envFrom(Astro.locals)));
             </div>
           </section>
         )}
-      </Fragment>
+      </div>
     ) : x.key === "latest" ? (
-      <Fragment>
+      <div class={`home-sec home-sec--${x.key}`}>
         {latest.length > 0 && (
           <section class="wrap home-block">
             <div class="block-head">
@@ -139,9 +154,9 @@ const meta = pageMeta({ path: "/" }, settings, siteUrl(envFrom(Astro.locals)));
             </div>
           </section>
         )}
-      </Fragment>
+      </div>
     ) : x.key === "topics" ? (
-      <Fragment>
+      <div class={`home-sec home-sec--${x.key}`}>
         {topics.length > 0 && (
           <div class="ruled">
             <section class="wrap rail wander">
@@ -152,7 +167,8 @@ const meta = pageMeta({ path: "/" }, settings, siteUrl(envFrom(Astro.locals)));
             </section>
           </div>
         )}
-      </Fragment>
+      </div>
     ) : null
   ))}
+  </div>
 </Base>
