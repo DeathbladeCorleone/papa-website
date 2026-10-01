@@ -5,6 +5,7 @@ import Link from "@tiptap/extension-link";
 import Youtube from "@tiptap/extension-youtube";
 import Placeholder from "@tiptap/extension-placeholder";
 import { useCallback, useRef, useState } from "react";
+import { uploadImage as uploadToServer } from "@/lib/client/image";
 
 /** Image node extended with an `align` attribute -> data-align in the HTML. */
 const AlignableImage = Image.extend({
@@ -23,32 +24,6 @@ const AlignableImage = Image.extend({
 interface Props {
   name: string;
   initialHtml?: string;
-}
-
-/** Compress an image file to WebP client-side before upload. */
-async function toWebP(file: File, maxWidth = 1600, quality = 0.82): Promise<Blob> {
-  const dataUrl = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-    const el = new window.Image();
-    el.onload = () => resolve(el);
-    el.onerror = reject;
-    el.src = dataUrl;
-  });
-  const scale = Math.min(1, maxWidth / img.width);
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(img.width * scale);
-  canvas.height = Math.round(img.height * scale);
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return file;
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-  return await new Promise<Blob>((resolve) =>
-    canvas.toBlob((b) => resolve(b ?? file), "image/webp", quality),
-  );
 }
 
 function ToolbarButton(props: { onClick: () => void; active?: boolean; title: string; children: React.ReactNode }) {
@@ -95,16 +70,10 @@ export default function Editor({ name, initialHtml = "" }: Props) {
       if (!editor) return;
       setBusy(true);
       try {
-        const webp = await toWebP(file);
-        const fd = new FormData();
-        fd.append("file", new File([webp], "image.webp", { type: "image/webp" }));
-        const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
-        const data = (await res.json()) as { url?: string; error?: string };
-        if (data.url) {
-          editor.chain().focus().setImage({ src: data.url }).run();
-        } else {
-          alert("Upload failed: " + (data.error ?? "unknown error"));
-        }
+        const url = await uploadToServer(file, 1600);
+        editor.chain().focus().setImage({ src: url }).run();
+      } catch (err) {
+        alert("Upload failed: " + (err instanceof Error ? err.message : String(err)));
       } finally {
         setBusy(false);
       }

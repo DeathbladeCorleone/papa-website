@@ -77,6 +77,7 @@ function mapSettings(r: Row): SiteSettings {
     tagline: String(r.tagline),
     description: String(r.description),
     authorName: String(r.author_name),
+    authorPhotoUrl: str(r.author_photo_url),
   };
 }
 
@@ -243,6 +244,22 @@ export class D1Repository implements BlogRepository {
       post.categoryId,
       JSON.stringify(post.tagIds),
       post.id,
+      limit,
+    );
+    return this.hydrate(rows);
+  }
+
+  async recordView(postId: string): Promise<void> {
+    await this.db.prepare("UPDATE posts SET views = views + 1 WHERE id = ? AND status = 'published'").bind(postId).run();
+  }
+
+  async listMostRead(limit: number, excludeIds: string[] = []): Promise<PostWithRelations[]> {
+    const rows = await this.rows(
+      `${POST_FROM}
+       WHERE p.status = 'published' AND p.id NOT IN (SELECT value FROM json_each(?))
+       ORDER BY p.views DESC, ${PUBLISHED_ORDER}
+       LIMIT ?`,
+      JSON.stringify(excludeIds),
       limit,
     );
     return this.hydrate(rows);
@@ -570,8 +587,8 @@ export class D1Repository implements BlogRepository {
     const cur = await this.getSettings();
     const next = { ...cur, ...Object.fromEntries(Object.entries(settings).filter(([, v]) => v !== undefined)) };
     await this.db
-      .prepare("UPDATE settings SET title = ?, tagline = ?, description = ?, author_name = ? WHERE id = 1")
-      .bind(next.title, next.tagline, next.description, next.authorName)
+      .prepare("UPDATE settings SET title = ?, tagline = ?, description = ?, author_name = ?, author_photo_url = ? WHERE id = 1")
+      .bind(next.title, next.tagline, next.description, next.authorName, next.authorPhotoUrl ?? null)
       .run();
     return next;
   }

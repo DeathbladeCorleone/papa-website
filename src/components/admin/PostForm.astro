@@ -1,5 +1,6 @@
 ---
 import Editor from "@/components/admin/Editor.tsx";
+import ImageField from "@/components/admin/ImageField.tsx";
 import type { Category, PostWithRelations } from "@/lib/domain/types";
 
 interface Props {
@@ -47,8 +48,8 @@ const isPublished = post?.status === "published";
   </div>
 
   <div class="field">
-    <label for="cover_url">Cover image URL <span class="muted">(optional — also used as the social image)</span></label>
-    <input type="url" id="cover_url" name="cover_url" value={post?.coverUrl ?? ""} placeholder="https://…" />
+    <label>Cover image <span class="muted">(shown at the top of the essay, on the home page, and when shared)</span></label>
+    <ImageField client:load name="cover_url" initialUrl={post?.coverUrl ?? ""} aspect="16 / 9" hint="A wide, landscape photo works best." />
   </div>
 
   <div class="field">

@@ -38,6 +38,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   tagline: "Essays and reflections",
   description: "Writing on a variety of topics by Pradeep Singh.",
   authorName: "Pradeep Singh",
+  authorPhotoUrl: null,
 };
 
 /**
@@ -126,6 +127,21 @@ export class MemoryRepository implements BlogRepository {
       .filter((s) => s.score > 0)
       .sort((a, b) => b.score - a.score);
     return scored.slice(0, limit).map((s) => this.hydrate(s.p));
+  }
+
+  private views = new Map<string, number>();
+
+  async recordView(postId: string): Promise<void> {
+    const post = this.posts.find((p) => p.id === postId && p.status === "published");
+    if (post) this.views.set(postId, (this.views.get(postId) ?? 0) + 1);
+  }
+
+  async listMostRead(limit: number, excludeIds: string[] = []): Promise<PostWithRelations[]> {
+    const pool = this.publishedSorted().filter((p) => !excludeIds.includes(p.id));
+    const ranked = pool
+      .map((p, i) => ({ p, v: this.views.get(p.id) ?? 0, i }))
+      .sort((a, b) => b.v - a.v || a.i - b.i);
+    return ranked.slice(0, limit).map((r) => this.hydrate(r.p));
   }
 
   async searchPublished(query: string): Promise<PostWithRelations[]> {

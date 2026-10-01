@@ -5,6 +5,7 @@ export const testSite: SiteSettings = {
   tagline: "Essays and reflections",
   description: "Writing on a variety of topics by Pradeep Singh.",
   authorName: "Pradeep Singh",
+  authorPhotoUrl: null,
 };
 
 export function makeCategory(p: Partial<Category> & { id: string }): Category {

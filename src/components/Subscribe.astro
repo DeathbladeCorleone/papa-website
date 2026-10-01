@@ -1,7 +1,7 @@
 ---
 interface Props {
-  /** "card" sits beside the About blurb on the home page; "banner" spans the article footer. */
-  variant?: "card" | "banner";
+  /** "band" is the full-width home page block; "card" a compact box; "banner" spans the article footer. */
+  variant?: "band" | "card" | "banner";
 }
 const { variant = "card" } = Astro.props;
 const returnTo = Astro.url.pathname;
@@ -9,7 +9,24 @@ const status = Astro.url.searchParams.get("subscribed");
 const blurb = "Get an occasional note when there’s something new. No schedule, no noise.";
 ---
 
-{variant === "card" ? (
+{variant === "band" ? (
+  <section class="subscribe-band" id="subscribe">
+    <div>
+      <div class="label accent">Subscribe</div>
+      <p class="lead">Get an occasional note when there’s something new.</p>
+      <p class="note">No schedule, no noise. Unsubscribe anytime.</p>
+      {status === "1" && <p class="notice ok">You’re on the list — thank you.</p>}
+      {status === "error" && <p class="notice err">Please enter a valid email address.</p>}
+    </div>
+    <form method="POST" action="/api/subscribe">
+      <input type="hidden" name="return_to" value={returnTo} />
+      <div class="honeypot" aria-hidden="true"><label>Website<input type="text" name="website" tabindex="-1" autocomplete="off" /></label></div>
+      <label class="visually-hidden" for="sub-email-band">Email</label>
+      <input type="email" id="sub-email-band" name="email" required placeholder="you@example.com" />
+      <button class="btn" type="submit">Subscribe</button>
+    </form>
+  </section>
+) : variant === "card" ? (
   <div class="card subscribe-card" id="subscribe">
     <div class="label accent">Subscribe</div>
     <p>{blurb}</p>

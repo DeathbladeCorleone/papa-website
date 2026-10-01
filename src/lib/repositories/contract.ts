@@ -199,6 +199,33 @@ export function repositoryContract(name: string, make: () => Promise<BlogReposit
       expect((await repo.getSettings()).title).toBe("Pradeep Singh");
     });
 
+    it("ranks Most read by views, topping up with newest when views are sparse", async () => {
+      const a = await repo.createPost({ title: "Old Favourite", bodyHtml: "<p>a</p>", status: "published" });
+      const runs = await repo.getPublishedBySlug("on-morning-runs");
+      for (let i = 0; i < 3; i++) await repo.recordView(runs!.id);
+      await repo.recordView(a.id);
+
+      const top = await repo.listMostRead(3);
+      expect(top.map((p) => p.slug)).toEqual(["on-morning-runs", "old-favourite", "welcome"]);
+      expect(await repo.listMostRead(2, [runs!.id])).toHaveLength(2);
+      expect((await repo.listMostRead(5, [runs!.id])).map((p) => p.id)).not.toContain(runs!.id);
+    });
+
+    it("never counts views for drafts or ranks them", async () => {
+      const draft = await repo.createPost({ title: "Hidden", bodyHtml: "<p>x</p>" });
+      await repo.recordView(draft.id);
+      await repo.recordView(draft.id);
+      expect((await repo.listMostRead(10)).map((p) => p.id)).not.toContain(draft.id);
+    });
+
+    it("stores the author portrait in settings", async () => {
+      expect((await repo.getSettings()).authorPhotoUrl).toBeNull();
+      await repo.updateSettings({ authorPhotoUrl: "/media/posts/me.webp" });
+      expect((await repo.getSettings()).authorPhotoUrl).toBe("/media/posts/me.webp");
+      await repo.updateSettings({ authorPhotoUrl: null });
+      expect((await repo.getSettings()).authorPhotoUrl).toBeNull();
+    });
+
     it("tracks login failures per IP within a window", async () => {
       const before = new Date(Date.now() - 1000).toISOString();
       await repo.recordLoginFailure("1.1.1.1");

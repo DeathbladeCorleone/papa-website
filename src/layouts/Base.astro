@@ -2,13 +2,14 @@
 import "@/styles/theme.css";
 import SiteHeader from "@/components/SiteHeader.astro";
 import SiteFooter from "@/components/SiteFooter.astro";
+import MenuOverlay from "@/components/MenuOverlay.astro";
 import type { MetaTags } from "@/lib/domain/seo";
 import { repoFrom } from "@/lib/context";
 
 interface Props {
   meta: MetaTags;
   jsonLd?: Record<string, unknown>;
-  /** The home page gets the larger masthead with the tagline. */
+  /** The home page renders its own header inside the hero image. */
   home?: boolean;
 }
 const { meta, jsonLd, home = false } = Astro.props;
@@ -64,7 +65,8 @@ const ogImage = meta.image ? new URL(meta.image, meta.canonical).href : undefine
     )}
   </head>
   <body>
-    <SiteHeader settings={settings} categories={categories} pages={pages} currentPath={currentPath} home={home} />
+    {!home && <SiteHeader settings={settings} pages={pages} currentPath={currentPath} />}
+    <MenuOverlay settings={settings} categories={categories} pages={pages} />
     <main>
       <slot />
     </main>

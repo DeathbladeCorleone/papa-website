@@ -35,3 +35,15 @@ export function renderCommentBody(input: string): string {
     .map((block) => `<p>${block.replace(/\n/g, "<br>")}</p>`)
     .join("");
 }
+
+/** Plain-text paragraphs from author HTML (only <p> blocks; empty ones dropped). */
+export function paragraphs(html: string): string[] {
+  const out: string[] = [];
+  for (const m of (html ?? "").matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)) {
+    // Inline formatting tags vanish without leaving a space ("<b>Pradeep</b>." → "Pradeep.").
+    const inline = m[1].replace(/<\/?(?:a|b|i|em|strong|u|s|span|code|mark|sub|sup|small)\b[^>]*>/gi, "");
+    const text = stripHtml(inline);
+    if (text) out.push(text);
+  }
+  return out;
+}

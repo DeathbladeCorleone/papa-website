@@ -10,12 +10,18 @@ import { readingTimeMinutes } from "@/lib/domain/reading-time";
 import { articleMeta, articleJsonLd, pageMeta } from "@/lib/domain/seo";
 import { formatDate, isoDate } from "@/lib/format";
 import { siteUrl } from "@/config/site";
+import { isLikelyBot } from "@/lib/domain/bots";
 
 const { slug = "" } = Astro.params;
 const repo = repoFrom(Astro.locals);
 const url = siteUrl(envFrom(Astro.locals));
 const [settings, post] = await Promise.all([repo.getSettings(), repo.getPublishedBySlug(slug)]);
 if (!post) Astro.response.status = 404;
+
+// Count a view for "Most read" (skip crawlers and link previews; never block the page on it).
+if (post && !isLikelyBot(Astro.request.headers.get("user-agent"))) {
+  await repo.recordView(post.id).catch(() => {});
+}
 
 const rendered = post ? withHeadingIds(post.bodyHtml) : null;
 const [similar, recentPosts, comments] = post

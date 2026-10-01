@@ -53,6 +53,10 @@ export interface BlogRepository {
   getFeatured(): Promise<PostWithRelations | null>;
   relatedPosts(post: PostWithRelations, limit?: number): Promise<PostWithRelations[]>;
   searchPublished(query: string): Promise<PostWithRelations[]>;
+  /** Count one view of a published post (drafts are ignored). */
+  recordView(postId: string): Promise<void>;
+  /** Published posts by views (desc), topped up with the newest; excludes `excludeIds`. */
+  listMostRead(limit: number, excludeIds?: string[]): Promise<PostWithRelations[]>;
 
   // Posts (admin)
   listAllPosts(): Promise<PostWithRelations[]>;

@@ -93,4 +93,6 @@ export interface SiteSettings {
   tagline: string;
   description: string;
   authorName: string;
+  /** Portrait shown in the home page About section. */
+  authorPhotoUrl: string | null;
 }

@@ -31,3 +31,16 @@ describe("renderCommentBody", () => {
     expect(renderCommentBody("   ")).toBe("");
   });
 });
+
+import { paragraphs } from "./html";
+describe("paragraphs", () => {
+  it("splits HTML into plain-text paragraphs, skipping empties", () => {
+    expect(paragraphs("<p>I’m <b>Pradeep</b>.</p><p> </p><h2>x</h2><p>Second &amp; last.</p>")).toEqual([
+      "I’m Pradeep.",
+      "Second & last.",
+    ]);
+  });
+  it("returns [] for empty input", () => {
+    expect(paragraphs("")).toEqual([]);
+  });
+});

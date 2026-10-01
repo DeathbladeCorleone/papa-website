@@ -1,0 +1,89 @@
+---
+import type { Category, Page, SiteSettings } from "@/lib/domain/types";
+interface Props { settings: SiteSettings; categories: Category[]; pages: Page[] }
+const { settings, categories, pages } = Astro.props;
+
+const hasAbout = pages.some((p) => p.slug === "about");
+const extraPages = pages.filter((p) => p.slug !== "about" && p.slug !== "contact");
+const items = [
+  { href: "/", label: "Home" },
+  { href: "/blog", label: "Essays" },
+  { href: "/#most-read", label: "Popular" },
+  ...(hasAbout ? [{ href: "/about", label: "About" }] : []),
+  ...extraPages.map((p) => ({ href: `/${p.slug}`, label: p.title })),
+  { href: "/contact", label: "Contact", italic: true },
+];
+---
+
+<div class="menu-overlay" id="site-menu" role="dialog" aria-modal="true" aria-label="Menu" hidden>
+  <div class="menu-top wrap">
+    <a class="wordmark" href="/">{settings.title}</a>
+    <button class="menu-btn" type="button" data-menu-close>
+      <span>Close</span>
+      <span class="close-icon" aria-hidden="true"></span>
+    </button>
+  </div>
+  <div class="menu-body wrap">
+    <nav class="menu-links" aria-label="Site">
+      {items.map((item, i) => (
+        <a href={item.href} class:list={{ italic: item.italic }} data-menu-link>
+          <span class="num">{String(i + 1).padStart(2, "0")}</span>{item.label}
+        </a>
+      ))}
+    </nav>
+    <div class="menu-side">
+      <div>
+        <div class="label">Search</div>
+        <form method="GET" action="/search" role="search">
+          <label class="visually-hidden" for="menu-search">Search essays</label>
+          <input class="menu-search" type="search" id="menu-search" name="q" placeholder="Search essays" />
+        </form>
+      </div>
+      {categories.length > 0 && (
+        <div>
+          <div class="label">Topics</div>
+          <div class="menu-topics">
+            {categories.map((c) => <a href={`/category/${c.slug}`} data-menu-link>{c.name}</a>)}
+          </div>
+        </div>
+      )}
+      <div class="menu-elsewhere">
+        <div class="label">Elsewhere</div>
+        <div class="menu-small-links">
+          <a href="/#subscribe" data-menu-link>Newsletter</a>
+          <a href="/rss.xml">RSS</a>
+          <a href="/contact" data-menu-link>Email</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script is:inline>
+  (() => {
+    const menu = document.getElementById("site-menu");
+    if (!menu || menu.dataset.bound) return;
+    menu.dataset.bound = "1";
+    let opener = null;
+    const open = (btn) => {
+      opener = btn || null;
+      menu.hidden = false;
+      document.documentElement.classList.add("menu-open");
+      document.querySelectorAll("[data-menu-open]").forEach((b) => b.setAttribute("aria-expanded", "true"));
+      menu.querySelector("[data-menu-close]")?.focus();
+    };
+    const close = () => {
+      menu.hidden = true;
+      document.documentElement.classList.remove("menu-open");
+      document.querySelectorAll("[data-menu-open]").forEach((b) => b.setAttribute("aria-expanded", "false"));
+      opener?.focus();
+    };
+    // Delegated: the home page's Menu button is rendered after this script runs.
+    document.addEventListener("click", (e) => {
+      const btn = e.target instanceof Element ? e.target.closest("[data-menu-open]") : null;
+      if (btn) open(btn);
+    });
+    menu.querySelectorAll("[data-menu-close], [data-menu-link]").forEach((el) => el.addEventListener("click", close));
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !menu.hidden) close(); });
+  })();
+</script>

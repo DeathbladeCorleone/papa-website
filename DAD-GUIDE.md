@@ -26,9 +26,13 @@ You can bookmark the `/admin` page so it's always one click away.
 4. **Adding a picture:** click **🖼 Image**, choose a photo. After it appears, the four
    arrow buttons on the right of the toolbar let you place it **left, centre, right, or
    full width**. Pictures are automatically shrunk so your pages stay fast.
-5. Pick a **category** (or type a new one), and add a few **tags** separated by commas
+5. **Cover image:** under *Cover image*, click **Upload image** and pick a wide photo. It
+   appears at the top of the essay, on the home page, and when someone shares the link.
+   If the essay is marked **Featured**, its cover becomes the big picture at the top of the
+   home page.
+6. Pick a **category** (or type a new one), and add a few **tags** separated by commas
    (like `running, books`). These help readers find related writing.
-6. When you're ready:
+7. When you're ready:
    - **Publish** — makes it live on the site.
    - **Save draft** — keeps it private so you can finish later.
 
@@ -65,7 +69,7 @@ The **Comments** menu item shows a number when something is waiting for you.
 
 ## Settings
 
-Under **Settings** you can change your site's **title**, **tagline**, your **name**
+Under **Settings** you can upload your **photo** (shown in “About me” on the home page) and change your site's **title**, **tagline**, your **name**
 (used on replies), and the site **description**.
 
 ---
