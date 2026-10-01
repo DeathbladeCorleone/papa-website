@@ -401,3 +401,8 @@ a.a-stat:hover { background: #fff; }
   .admin .hide-sm { display: none; }
 }
 .a-compose .go { color: #e3c9a8; }
+.a-about-photo { display: flex; align-items: center; gap: 12px; }
+.a-about-photo .ph { display: flex; align-items: center; justify-content: center; width: 48px; height: 60px; padding: 0; overflow: hidden; cursor: pointer; background: var(--canvas); border: 1px solid var(--rule); }
+.a-about-photo .ph img { width: 100%; height: 100%; object-fit: cover; }
+.a-about-photo .ph span { font-family: var(--serif); font-style: italic; font-size: 18px; color: var(--accent); }
+.a-about-photo .acts { display: flex; gap: 4px; }

@@ -89,7 +89,8 @@ first lines of your About page appear in "About me" on the home page.
 
 - **Home page** — choose which essay is the big one at the top (or let it always be the
   newest), switch sections on or off, put them in a different order, and rename their
-  headings.
+  headings. In the **About me** row, **Add photo** puts your portrait beside it (until you
+  do, it shows your initials).
 - **Menu & topics** — put your pages in the order you want in the top menu, and rename,
   merge or delete categories and tags.
 - **Photos** — every picture you've uploaded. Click one to add a description, see which

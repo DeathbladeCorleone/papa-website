@@ -27,12 +27,16 @@ const [newest, counts] = await Promise.all([
   Promise.all(categories.map((c) => repo.countPublished({ categorySlug: c.slug }))),
 ]);
 const latest = newest.filter((p) => !exclude.includes(p.id)).slice(0, layout.latestCount);
-// Never show the same essay twice on the page: Most read skips the hero and
-// (when the Latest section is on) the essays already listed there.
-const shownIds = [...exclude, ...(showing("latest") ? latest.map((p) => p.id) : [])];
-const mostRead = await repo.listMostRead(layout.mostReadCount, shownIds);
+// Most read never repeats the hero. It also skips essays already in Latest,
+// but only while that still leaves at least two to show — on a young blog it's
+// better to repeat an essay than to lose the section.
+const latestIds = showing("latest") ? latest.map((p) => p.id) : [];
+const deduped = latestIds.length ? await repo.listMostRead(layout.mostReadCount, [...exclude, ...latestIds]) : [];
+const mostRead = deduped.length >= 2 ? deduped : await repo.listMostRead(layout.mostReadCount, exclude);
 const topics = categories.map((c, i) => ({ ...c, count: counts[i] })).filter((c) => c.count > 0);
 const [aboutLead = "", aboutBody = ""] = about ? paragraphs(about.bodyHtml) : [];
+// Shown in the portrait frame until a photo is chosen in Settings.
+const initials = settings.authorName.split(/\s+/).filter(Boolean).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
 const mins = (html: string) => readingTimeMinutes(html);
 
 // Sections that are switched on AND have something to show, in Pradeep's order.
@@ -115,11 +119,21 @@ const meta = pageMeta({ path: "/" }, settings, siteUrl(envFrom(Astro.locals)));
     ) : x.key === "about" ? (
       <div class={`home-sec home-sec--${x.key}`}>
         {(aboutLead || settings.authorPhotoUrl) && (
-          <section class:list={["wrap", "about-block", { "no-photo": !settings.authorPhotoUrl }]}>
-            {settings.authorPhotoUrl && (
-              <div class="portrait"><img src={settings.authorPhotoUrl} alt={settings.authorName} loading="lazy" /></div>
-            )}
-            <div>
+          <section class="wrap about-block">
+            <figure class="portrait">
+              <div class="portrait-frame">
+                {settings.authorPhotoUrl ? (
+                  <img src={settings.authorPhotoUrl} alt={`Portrait of ${settings.authorName}`} loading="lazy" />
+                ) : (
+                  <div class="monogram" aria-hidden="true"><span>{initials}</span></div>
+                )}
+              </div>
+              <figcaption>
+                <span class="nm">{settings.authorName}</span>
+                {settings.tagline && <span class="tl">{settings.tagline}</span>}
+              </figcaption>
+            </figure>
+            <div class="about-text">
               <div class="label accent">{section.about.title}</div>
               {aboutLead && <p class="about-lead">{aboutLead}</p>}
               {aboutBody && <p class="about-body">{aboutBody}</p>}

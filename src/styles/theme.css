@@ -463,10 +463,19 @@ input.menu-search[type="search"]:focus { outline: none; border-bottom-color: var
 .subscribe-band .btn { padding: 13px 24px; }
 
 /* About */
-.about-block { display: grid; grid-template-columns: 4fr 7fr; gap: 48px 96px; align-items: center; padding-top: 104px; padding-bottom: 104px; border-bottom: 1px solid var(--rule); }
-.about-block.no-photo { grid-template-columns: minmax(0, 1fr); max-width: calc(52rem + 2 * var(--gutter)); }
-.portrait { aspect-ratio: 4 / 5; border: 1px solid var(--rule); overflow: hidden; }
-.portrait img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.about-block { display: grid; grid-template-columns: minmax(260px, 4fr) 7fr; gap: 48px 112px; align-items: center; padding-top: 104px; padding-bottom: 104px; border-bottom: 1px solid var(--rule); }
+/* Portrait: a photo in a thin frame with an offset accent rule behind it, and a
+   quiet caption. Without a photo, the same frame holds a serif monogram. */
+.portrait { margin: 0; max-width: 400px; }
+.portrait-frame { position: relative; aspect-ratio: 4 / 5; }
+.portrait-frame::before { content: ""; position: absolute; inset: 18px -18px -18px 18px; border: 1px solid var(--link-underline); pointer-events: none; }
+.portrait-frame img, .portrait-frame .monogram { position: relative; width: 100%; height: 100%; display: block; border: 1px solid var(--rule); }
+.portrait-frame img { object-fit: cover; background: var(--canvas); }
+.monogram { display: flex !important; align-items: center; justify-content: center; background: radial-gradient(circle at 50% 42%, #f6efe3 0%, var(--canvas) 70%); }
+.monogram span { font-family: var(--serif); font-size: clamp(72px, 8vw, 120px); font-weight: 400; font-style: italic; letter-spacing: -0.03em; color: var(--accent); opacity: .85; }
+.portrait figcaption { display: flex; flex-direction: column; gap: 4px; margin-top: 34px; font-family: var(--sans); }
+.portrait figcaption .nm { font-size: 12px; font-weight: 500; letter-spacing: .18em; text-transform: uppercase; color: var(--ink); }
+.portrait figcaption .tl { font-size: 13px; color: var(--ink-faint); }
 .about-lead { margin: 24px 0 0; font-size: 40px; line-height: 1.22; letter-spacing: -0.018em; }
 .about-body { margin: 26px 0 0; max-width: 36rem; font-size: 19px; line-height: 1.65; color: var(--ink-soft); }
 .about-block .text-link { margin-top: 30px; }
@@ -542,7 +551,10 @@ input.menu-search[type="search"]:focus { outline: none; border-bottom-color: var
   .subscribe-band .btn { padding: 14px; }
 
   .about-block { grid-template-columns: minmax(0, 1fr); gap: 24px; padding-top: 40px; padding-bottom: 36px; }
-  .portrait { width: 62%; }
+  .portrait { width: min(62%, 260px); }
+  .portrait-frame::before { inset: 10px -10px -10px 10px; }
+  .portrait figcaption { margin-top: 20px; }
+  .monogram span { font-size: 64px; }
   .about-lead { margin-top: 12px; font-size: 25px; line-height: 1.28; }
   .about-body { display: none; }
   .about-block .text-link { margin-top: 20px; }

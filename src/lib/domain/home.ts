@@ -4,7 +4,7 @@ import type { HomeLayout, HomeSection, HomeSectionKey } from "./types";
 export const HOME_SECTION_INFO: Record<HomeSectionKey, { name: string; hint: string; titled: boolean }> = {
   mostRead: { name: "Most read", hint: "Your most-viewed essays, numbered", titled: true },
   subscribe: { name: "Subscribe box", hint: "Lets readers leave their email", titled: false },
-  about: { name: "About me", hint: "Your portrait and the opening of the About page", titled: true },
+  about: { name: "About me", hint: "Your photo and the opening lines of the About page", titled: true },
   latest: { name: "Latest", hint: "The newest essays with their pictures", titled: true },
   topics: { name: "Topics", hint: "Links to every category", titled: true },
 };

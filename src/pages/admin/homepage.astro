@@ -20,5 +20,12 @@ const essays = live.map((p) => ({ id: p.id, title: p.title, coverUrl: p.coverUrl
       <p class="lede">Choose what visitors see first, and which sections follow it.</p>
     </div>
   </header>
-  <HomeLayoutEditor client:load layout={settings.homeLayout} essays={essays} featuredId={featured?.id ?? null} />
+  <HomeLayoutEditor
+    client:load
+    layout={settings.homeLayout}
+    essays={essays}
+    featuredId={featured?.id ?? null}
+    authorPhotoUrl={settings.authorPhotoUrl}
+    initials={settings.authorName.split(/\s+/).filter(Boolean).map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
+  />
 </AdminLayout>

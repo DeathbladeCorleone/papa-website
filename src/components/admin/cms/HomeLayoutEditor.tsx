@@ -1,13 +1,16 @@
 import { useState } from "react";
 import { Icon } from "../editor/Icon";
+import { MediaPicker } from "../editor/MediaPicker";
 import { SortList, postJson, useToast } from "./SortList";
 import { HOME_SECTION_INFO } from "@/lib/domain/home";
 import type { HomeLayout, HomeSection } from "@/lib/domain/types";
 
 interface EssayOption { id: string; title: string; coverUrl: string | null; date: string }
-interface Props { layout: HomeLayout; essays: EssayOption[]; featuredId: string | null }
+interface Props { layout: HomeLayout; essays: EssayOption[]; featuredId: string | null; authorPhotoUrl: string | null; initials: string }
 
-export default function HomeLayoutEditor({ layout: initial, essays, featuredId: initialFeatured }: Props) {
+export default function HomeLayoutEditor({ layout: initial, essays, featuredId: initialFeatured, authorPhotoUrl, initials }: Props) {
+  const [photo, setPhoto] = useState(authorPhotoUrl ?? "");
+  const [picking, setPicking] = useState(false);
   const [layout, setLayout] = useState(initial);
   const [featuredId, setFeaturedId] = useState(initialFeatured ?? "");
   const [dirty, setDirty] = useState(false);
@@ -23,7 +26,7 @@ export default function HomeLayoutEditor({ layout: initial, essays, featuredId: 
   const save = async () => {
     setBusy(true); setError("");
     try {
-      await postJson("/api/admin/homepage", { layout, featuredId: featuredId || null });
+      await postJson("/api/admin/homepage", { layout, featuredId: featuredId || null, authorPhotoUrl: photo || null });
       setDirty(false);
       toast.show("Home page saved");
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
@@ -88,6 +91,17 @@ export default function HomeLayoutEditor({ layout: initial, essays, featuredId: 
                     )}
                     <div className="hn">{info.titled && s.title.trim() !== info.name ? `${info.name} · ` : ""}{info.hint}</div>
                   </div>
+                  {s.key === "about" && (
+                    <div className="a-about-photo">
+                      <button type="button" className="ph" onClick={() => setPicking(true)} title={photo ? "Change the photo" : "Add a photo"}>
+                        {photo ? <img src={photo} alt="" /> : <span>{initials}</span>}
+                      </button>
+                      <div className="acts">
+                        <button type="button" className="a-btn ghost sm" onClick={() => setPicking(true)}>{photo ? "Change photo" : "Add photo"}</button>
+                        {photo && <button type="button" className="a-btn quiet sm" onClick={() => { setPhoto(""); setDirty(true); }}>Remove</button>}
+                      </div>
+                    </div>
+                  )}
                   {(s.key === "mostRead" || s.key === "latest") && s.visible && (
                     <label className="a-count">
                       <span>Show</span>
@@ -116,6 +130,13 @@ export default function HomeLayoutEditor({ layout: initial, essays, featuredId: 
         <a className="a-btn ghost" href="/" target="_blank" rel="noopener"><Icon name="external" size={16} /> View home page</a>
         <button type="button" className="a-btn" onClick={save} disabled={busy || !dirty}>{busy ? "Saving…" : dirty ? "Save changes" : "Saved"}</button>
       </div>
+      {picking && (
+        <MediaPicker
+          title="Choose your photo"
+          onClose={() => setPicking(false)}
+          onPick={(imgs) => { if (imgs[0]) { setPhoto(imgs[0].src); setDirty(true); } setPicking(false); }}
+        />
+      )}
       {toast.node}
     </div>
   );
