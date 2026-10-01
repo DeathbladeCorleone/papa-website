@@ -17,7 +17,7 @@
     {
       "binding": "DB",
       "database_name": "papa-website",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "c7cf6560-315f-4cf9-aae1-48a513b9f53e",
       "migrations_dir": "migrations"
     }
   ],
