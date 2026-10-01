@@ -1,0 +1,26 @@
+---
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import MenuTopicsEditor from "@/components/admin/cms/MenuTopicsEditor.tsx";
+import { repoFrom } from "@/lib/context";
+
+const repo = repoFrom(Astro.locals);
+const [pages, categories, tags, counts] = await Promise.all([
+  repo.listAllPages(),
+  repo.listCategories(),
+  repo.listTags(),
+  repo.taxonomyCounts(),
+]);
+const menuPages = pages.map((p) => ({ id: p.id, title: p.title, slug: p.slug, published: p.status === "published", shown: p.showInMenu }));
+const terms = (list: { id: string; name: string; slug: string }[], c: Record<string, number>) =>
+  list.map((t) => ({ id: t.id, name: t.name, slug: t.slug, count: c[t.id] ?? 0 }));
+---
+<AdminLayout title="Menu & topics">
+  <header class="a-head">
+    <div>
+      <div class="a-kicker">Website</div>
+      <h1>Menu &amp; topics</h1>
+      <p class="lede">How readers find their way around: the menu at the top, and the categories and tags that group your essays.</p>
+    </div>
+  </header>
+  <MenuTopicsEditor client:load pages={menuPages} categories={terms(categories, counts.categories)} tags={terms(tags, counts.tags)} />
+</AdminLayout>

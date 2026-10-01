@@ -11,15 +11,30 @@ import { articleMeta, articleJsonLd, pageMeta } from "@/lib/domain/seo";
 import { formatDate, isoDate } from "@/lib/format";
 import { siteUrl } from "@/config/site";
 import { isLikelyBot } from "@/lib/domain/bots";
+import { authConfig, verifySession, SESSION_COOKIE } from "@/lib/auth";
 
 const { slug = "" } = Astro.params;
 const repo = repoFrom(Astro.locals);
 const url = siteUrl(envFrom(Astro.locals));
-const [settings, post] = await Promise.all([repo.getSettings(), repo.getPublishedBySlug(slug)]);
+const [settings, livePost] = await Promise.all([repo.getSettings(), repo.getPublishedBySlug(slug)]);
+
+// ?preview lets a signed-in author see a draft or scheduled essay exactly as readers will.
+let post = livePost;
+let previewing = false;
+if (!post && Astro.url.searchParams.has("preview")) {
+  const cfg = authConfig(envFrom(Astro.locals), import.meta.env.DEV);
+  const token = Astro.cookies.get(SESSION_COOKIE)?.value;
+  if (cfg && token && (await verifySession(token, cfg))) {
+    post = (await repo.listAllPosts()).find((p) => p.slug === slug) ?? null;
+    previewing = Boolean(post);
+    Astro.response.headers.set("Cache-Control", "no-store");
+    Astro.response.headers.set("X-Robots-Tag", "noindex");
+  }
+}
 if (!post) Astro.response.status = 404;
 
 // Count a view for "Most read" (skip crawlers and link previews; never block the page on it).
-if (post && !isLikelyBot(Astro.request.headers.get("user-agent"))) {
+if (post && !previewing && !isLikelyBot(Astro.request.headers.get("user-agent"))) {
   await repo.recordView(post.id).catch(() => {});
 }
 
@@ -43,6 +58,12 @@ const jsonLd = post ? articleJsonLd(post, settings, url) : undefined;
 ---
 
 <Base meta={meta} jsonLd={jsonLd}>
+  {previewing && (
+    <div class="preview-bar" role="status">
+      <span><strong>Preview.</strong> Only you can see this — it isn't published yet.</span>
+      <a href={`/admin/posts/${post!.id}`}>Back to editing</a>
+    </div>
+  )}
   {!post || !rendered ? (
     <section class="wrap simple-page">
       <h1>Essay not found</h1>

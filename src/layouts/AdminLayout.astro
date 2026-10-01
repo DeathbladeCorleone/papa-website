@@ -1,23 +1,73 @@
 ---
 import "@/styles/theme.css";
-import { usingDemoData } from "@/lib/context";
+import "@/styles/admin.css";
+import "@/styles/editor.css";
+import Icon from "@/components/admin/Icon.astro";
+import type { IconName } from "@/components/admin/icons";
+import { repoFrom, usingDemoData } from "@/lib/context";
 
-interface Props { title: string; pending?: number }
-const { title, pending = 0 } = Astro.props;
+interface Props {
+  title: string;
+  /** "bare" drops the sidebar (the full-screen editor). */
+  bare?: boolean;
+  /** Kept for older pages; badge counts are now computed here. */
+  pending?: number;
+}
+const { title, bare = false } = Astro.props;
 const admin = Astro.locals.admin;
 const path = Astro.url.pathname;
 const demo = usingDemoData(Astro.locals);
 
-const links = [
-  { href: "/admin", label: "Dashboard" },
-  { href: "/admin/posts", label: "Posts" },
-  { href: "/admin/comments", label: `Comments${pending ? ` (${pending})` : ""}` },
-  { href: "/admin/pages", label: "Pages" },
-  { href: "/admin/messages", label: "Messages" },
-  { href: "/admin/subscribers", label: "Subscribers" },
-  { href: "/admin/settings", label: "Settings" },
+const repo = repoFrom(Astro.locals);
+const [settings, pendingComments, messages] = await Promise.all([
+  repo.getSettings(),
+  repo.listCommentsByStatus("pending"),
+  repo.listMessages(),
+]);
+const unread = messages.filter((m) => !m.read).length;
+
+type Link = { href: string; label: string; icon: IconName; count?: number };
+const groups: { name: string; links: Link[] }[] = [
+  {
+    name: "Write",
+    links: [
+      { href: "/admin", label: "Overview", icon: "home" },
+      { href: "/admin/posts", label: "Essays", icon: "pen" },
+      { href: "/admin/pages", label: "Pages", icon: "doc" },
+    ],
+  },
+  {
+    name: "Readers",
+    links: [
+      { href: "/admin/comments", label: "Comments", icon: "chat", count: pendingComments.length },
+      { href: "/admin/messages", label: "Messages", icon: "mail", count: unread },
+      { href: "/admin/subscribers", label: "Subscribers", icon: "users" },
+    ],
+  },
+  {
+    name: "Website",
+    links: [
+      { href: "/admin/homepage", label: "Home page", icon: "layout" },
+      { href: "/admin/menu", label: "Menu & topics", icon: "menu" },
+      { href: "/admin/media", label: "Photos", icon: "images" },
+      { href: "/admin/settings", label: "Settings", icon: "gear" },
+    ],
+  },
 ];
-const active = (href: string) => href === "/admin" ? path === "/admin" : path.startsWith(href);
+const active = (href: string) => (href === "/admin" ? path === "/admin" || path === "/admin/" : path.startsWith(href));
+
+// One-off confirmations passed back by form actions as ?saved=1 etc.
+const q = Astro.url.searchParams;
+const toasts: Record<string, string> = {
+  saved: "Saved",
+  deleted: "Deleted",
+  updated: "Updated",
+  published: "Published",
+  unpublished: "Moved back to drafts",
+  featured: "Now featured on the home page",
+};
+const toast = Object.keys(toasts).find((k) => q.has(k));
+const firstName = settings.authorName.split(/\s+/)[0] || settings.authorName;
 ---
 
 <!doctype html>
@@ -25,61 +75,63 @@ const active = (href: string) => href === "/admin" ? path === "/admin" : path.st
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{title} · Admin</title>
+    <meta name="robots" content="noindex" />
+    <title>{title} · {settings.title}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet" />
-    <style>
-      body { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
-      @media (max-width: 720px) { body { grid-template-columns: 1fr; } }
-      .admin-side { background: var(--paper-raised); border-right: 1px solid var(--rule); padding: 1.5rem 1rem; font-family: var(--sans); }
-      .admin-side .logo { font-weight: 600; font-size: 1.1rem; margin-bottom: 1.25rem; }
-      .admin-side nav { display: flex; flex-direction: column; gap: 0.15rem; }
-      .admin-side a { display: block; padding: 0.5rem 0.7rem; border-radius: var(--radius); color: var(--ink-soft); text-decoration: none; font-size: 0.95rem; }
-      .admin-side a:hover { background: var(--rule-soft); }
-      .admin-side a[aria-current="page"] { background: var(--accent); color: #fff; }
-      .admin-side .foot { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--rule); font-size: 0.85rem; }
-      .admin-main { padding: 2rem clamp(1rem, 4vw, 3rem); font-family: var(--sans); max-width: 60rem; }
-      .admin-main h1 { font-family: var(--sans); font-size: 1.5rem; }
-      .admin-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
-      .admin-table th, .admin-table td { text-align: left; padding: 0.6rem 0.5rem; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
-      .admin-table th { color: var(--ink-faint); font-weight: 500; }
-      .pill { font-size: 0.75rem; padding: 0.1rem 0.5rem; border-radius: 999px; background: var(--rule-soft); color: var(--ink-soft); }
-      .pill.published { background: #e6efe7; color: var(--ok); }
-      .pill.draft { background: #f2ede2; color: var(--accent-ink); }
-      .inline-form { display: inline; }
-      .toolbar { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin: 1rem 0; }
-      .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
-      .stat { background: var(--paper-raised); border: 1px solid var(--rule); border-radius: var(--radius); padding: 1rem 1.25rem; }
-      .stat .n { font-size: 1.8rem; font-weight: 600; font-family: var(--serif); }
-      .stat .l { font-size: 0.85rem; color: var(--ink-faint); }
-    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet" />
   </head>
-  <body>
-    <aside class="admin-side">
-      <div class="logo">✎ Admin</div>
-      <nav>
-        {links.map((l) => (
-          <a href={l.href} aria-current={active(l.href) ? "page" : undefined}>{l.label}</a>
-        ))}
-      </nav>
-      <div class="foot">
-        <a href="/" target="_blank" rel="noopener">View site ↗</a>
-        <form method="POST" action="/api/admin/logout" style="margin-top:0.5rem">
-          <button class="btn secondary small" type="submit">Log out</button>
-        </form>
-        {admin && <p class="muted small" style="margin-top:0.75rem">{admin.email}</p>}
-      </div>
-    </aside>
-    <main class="admin-main">
-      {demo && (
-        <p class="notice info">
-          <strong>Demo mode.</strong> No database is connected, so this dashboard is using
-          in-memory sample data that resets on restart.
-        </p>
-      )}
+  <body class="admin">
+    {bare ? (
       <slot />
-    </main>
+    ) : (
+      <div class="a-shell">
+        <aside class="a-side" id="a-side" aria-label="Dashboard navigation">
+          <div class="a-brand">
+            <a href="/admin"><span class="wm">{settings.title}</span></a>
+            <span class="sub">Dashboard</span>
+          </div>
+          <a class="a-write" href="/admin/posts/new"><Icon name="pen" size={17} /> Write an essay</a>
+          <nav class="a-nav">
+            {groups.map((g) => (
+              <>
+                <div class="grp">{g.name}</div>
+                {g.links.map((l) => (
+                  <a href={l.href} aria-current={active(l.href) ? "page" : undefined}>
+                    <Icon name={l.icon} />
+                    <span>{l.label}</span>
+                    {l.count ? <span class="count" aria-label={`${l.count} new`}>{l.count}</span> : null}
+                  </a>
+                ))}
+              </>
+            ))}
+          </nav>
+          <div class="a-side-foot">
+            <a href="/" target="_blank" rel="noopener"><Icon name="external" size={16} /> View the website</a>
+            <form method="POST" action="/api/admin/logout">
+              <button type="submit"><Icon name="logout" size={16} /> Sign out</button>
+            </form>
+            {admin && <div class="who" title={admin.email}>Signed in as {firstName}</div>}
+          </div>
+        </aside>
+        <div class="a-scrim" data-nav-close></div>
+        <div>
+          <header class="a-mobilebar">
+            <a class="wm" href="/admin">{settings.title}</a>
+            <button type="button" data-nav-open aria-controls="a-side" aria-expanded="false"><Icon name="menu" /> Menu</button>
+          </header>
+          <main class="a-main">
+            {demo && (
+              <p class="a-notice warn">
+                <strong>Demo mode.</strong> No database is connected, so changes here are kept in memory and reset on restart.
+              </p>
+            )}
+            <slot />
+          </main>
+        </div>
+      </div>
+    )}
+    {toast && <div class="a-toast" role="status"><Fragment set:html={`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12.5 4.5 4.5L19 7"/></svg>`} />{toasts[toast]}</div>}
     <script is:inline>
       // Confirm dangerous actions on forms marked data-confirm.
       document.addEventListener("submit", (e) => {
@@ -87,6 +139,24 @@ const active = (href: string) => href === "/admin" ? path === "/admin" : path.st
         const msg = form && form.getAttribute && form.getAttribute("data-confirm");
         if (msg && !window.confirm(msg)) e.preventDefault();
       });
+      // Mobile navigation drawer.
+      document.addEventListener("click", (e) => {
+        const t = e.target instanceof Element ? e.target : null;
+        if (!t) return;
+        if (t.closest("[data-nav-open]")) document.body.classList.add("nav-open");
+        else if (t.closest("[data-nav-close]")) document.body.classList.remove("nav-open");
+        // Close any open dropdown menus when clicking elsewhere.
+        document.querySelectorAll("details.a-menu[open]").forEach((d) => { if (!d.contains(t)) d.removeAttribute("open"); });
+      });
+      // Drop the one-off ?saved=1 style flags so a refresh doesn't repeat the toast.
+      (() => {
+        const u = new URL(location.href);
+        let changed = false;
+        for (const k of ["saved", "deleted", "updated", "published", "unpublished", "featured"]) {
+          if (u.searchParams.has(k)) { u.searchParams.delete(k); changed = true; }
+        }
+        if (changed) history.replaceState(null, "", u.pathname + (u.search ? u.search : "") + u.hash);
+      })();
     </script>
   </body>
 </html>

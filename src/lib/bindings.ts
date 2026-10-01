@@ -34,6 +34,7 @@ export interface MediaBucket {
     options?: { httpMetadata?: { contentType?: string; cacheControl?: string } },
   ): Promise<unknown>;
   get(key: string): Promise<MediaObject | null>;
+  delete(key: string): Promise<void>;
 }
 
 /** Bindings + vars available on `Astro.locals.runtime.env` in production. */

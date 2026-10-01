@@ -1,28 +1,17 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
-import PageForm from "@/components/admin/PageForm.astro";
+import PostEditor from "@/components/admin/editor/PostEditor.tsx";
 import { repoFrom } from "@/lib/context";
 
-const { id } = Astro.params;
-const repo = repoFrom(Astro.locals);
-const [page, pending] = await Promise.all([
-  id ? repo.getPageById(id) : Promise.resolve(null),
-  repo.listCommentsByStatus("pending"),
-]);
-if (!page) Astro.response.status = 404;
-const saved = Astro.url.searchParams.get("saved");
+const page = Astro.params.id ? await repoFrom(Astro.locals).getPageById(Astro.params.id) : null;
+if (!page) return Astro.redirect("/admin/pages");
+const initial = {
+  id: page.id, slug: page.slug, title: page.title, excerpt: "", bodyHtml: page.bodyHtml, coverUrl: null, categoryId: null, tags: [],
+  featured: false, seoTitle: null, seoDescription: null, status: page.status, publishedAt: null, updatedAt: page.updatedAt,
+  state: page.status, showInMenu: page.showInMenu,
+};
 ---
-<AdminLayout title={page ? `Edit: ${page.title}` : "Not found"} pending={pending.length}>
-  {page ? (
-    <>
-      <h1>Edit page</h1>
-      {saved && <p class="notice ok">Saved.</p>}
-      <PageForm page={page} />
-    </>
-  ) : (
-    <>
-      <h1>Page not found</h1>
-      <p><a class="btn secondary" href="/admin/pages">← Back to pages</a></p>
-    </>
-  )}
+
+<AdminLayout title={page.title} bare>
+  <PostEditor client:only="react" kind="page" initial={initial} categories={[]} allTags={[]} />
 </AdminLayout>

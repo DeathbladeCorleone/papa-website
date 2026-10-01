@@ -1,3 +1,4 @@
+import { DEFAULT_HOME_LAYOUT } from "./home";
 import type { PostWithRelations, SiteSettings, Category, Tag } from "./types";
 
 export const testSite: SiteSettings = {
@@ -6,6 +7,7 @@ export const testSite: SiteSettings = {
   description: "Writing on a variety of topics by Pradeep Singh.",
   authorName: "Pradeep Singh",
   authorPhotoUrl: null,
+  homeLayout: DEFAULT_HOME_LAYOUT,
 };
 
 export function makeCategory(p: Partial<Category> & { id: string }): Category {

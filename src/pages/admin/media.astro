@@ -1,0 +1,14 @@
+---
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import MediaLibrary from "@/components/admin/cms/MediaLibrary.tsx";
+---
+<AdminLayout title="Photos">
+  <header class="a-head">
+    <div>
+      <div class="a-kicker">Website</div>
+      <h1>Photos</h1>
+      <p class="lede">Every picture you've uploaded. Add a description, see where each one is used, and clear out the ones you don't need.</p>
+    </div>
+  </header>
+  <MediaLibrary client:only="react" />
+</AdminLayout>

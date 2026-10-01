@@ -1,28 +1,53 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
+import Icon from "@/components/admin/Icon.astro";
 import { repoFrom } from "@/lib/context";
 import { formatDate } from "@/lib/format";
 import { renderCommentBody } from "@/lib/domain/html";
 
-const repo = repoFrom(Astro.locals);
-const [messages, pending] = await Promise.all([
-  repo.listMessages(),
-  repo.listCommentsByStatus("pending"),
-]);
+const messages = await repoFrom(Astro.locals).listMessages();
+const unread = messages.filter((m) => !m.read).length;
+const initial = (name: string) => (name.trim().charAt(0) || "?").toUpperCase();
 ---
-<AdminLayout title="Messages" pending={pending.length}>
-  <h1>Contact messages</h1>
-  {messages.length === 0 && <p class="muted">No messages yet.</p>}
-  {messages.map((m) => (
-    <div class="stat" style={`margin-bottom:1rem;${m.read ? "opacity:0.7" : ""}`}>
-      <div class="small muted">{formatDate(m.createdAt)} {!m.read && <span class="pill draft">new</span>}</div>
-      <div><strong>{m.name}</strong> · <a href={`mailto:${m.email}`}>{m.email}</a></div>
-      <div class="body" set:html={renderCommentBody(m.body)} style="margin-top:0.4rem" />
-      <form class="inline-form" method="POST" action="/api/admin/messages" style="margin-top:0.5rem">
-        <input type="hidden" name="id" value={m.id} />
-        <input type="hidden" name="read" value={m.read ? "false" : "true"} />
-        <button class="btn secondary small" type="submit">{m.read ? "Mark unread" : "Mark read"}</button>
-      </form>
+
+<AdminLayout title="Messages">
+  <header class="a-head">
+    <div>
+      <div class="a-kicker">Readers</div>
+      <h1>Messages</h1>
+      <p class="lede">Notes sent through the Contact page{unread ? ` — ${unread} new` : ""}. Reply by email; readers never see these.</p>
     </div>
-  ))}
+  </header>
+
+  {messages.length === 0 ? (
+    <div class="a-empty">
+      <h3>No messages yet</h3>
+      <p>When someone writes to you from the Contact page, it will appear here.</p>
+    </div>
+  ) : (
+    <div class="a-items">
+      {messages.map((m) => (
+        <article class:list={["a-item", { read: m.read }]}>
+          <div class="a-avatar" aria-hidden="true">{initial(m.name)}</div>
+          <div>
+            <div class="who">
+              <b>{m.name}</b>
+              <span class="s">{m.email}</span>
+              <span class="s">{formatDate(m.createdAt)}</span>
+              {!m.read && <span class="a-tag accent">New</span>}
+            </div>
+            <div class="body" set:html={renderCommentBody(m.body)} />
+            <div class="acts">
+              <a class="a-btn sm" href={`mailto:${m.email}?subject=${encodeURIComponent("Re: your message")}`}><Icon name="mail" size={16} /> Reply by email</a>
+              <form method="POST" action="/api/admin/messages">
+                <input type="hidden" name="id" value={m.id} />
+                <input type="hidden" name="read" value={m.read ? "false" : "true"} />
+                <button class="a-btn quiet sm" type="submit">{m.read ? "Mark as new" : <><Icon name="check" size={16} /> Mark as read</>}</button>
+              </form>
+            </div>
+          </div>
+        </article>
+      ))}
+    </div>
+  )}
 </AdminLayout>

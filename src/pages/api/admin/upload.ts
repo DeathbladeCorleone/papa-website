@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { mediaFrom } from "@/lib/context";
+import { mediaFrom, repoFrom } from "@/lib/context";
 
 export const prerender = false;
 
@@ -20,8 +20,14 @@ function json(body: unknown, status = 200): Response {
  * bucket and return its site-relative URL. Without an R2 binding (local
  * preview), returns a data URL so the editor still works.
  */
+const dim = (v: FormDataEntryValue | null) => {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) && n > 0 && n < 100_000 ? n : null;
+};
+
 export const POST: APIRoute = async ({ request, locals }) => {
-  const file = (await request.formData()).get("file");
+  const form = await request.formData();
+  const file = form.get("file");
   if (!(file instanceof File)) return json({ error: "No file provided" }, 400);
 
   const ext = ALLOWED.get(file.type);
@@ -41,5 +47,19 @@ export const POST: APIRoute = async ({ request, locals }) => {
   await bucket.put(key, bytes, {
     httpMetadata: { contentType: file.type, cacheControl: "public, max-age=31536000, immutable" },
   });
-  return json({ url: `/media/${key}` });
+  const url = `/media/${key}`;
+  // Record it in the photo library (a failure here must not lose the upload).
+  await repoFrom(locals)
+    .addMedia({
+      key,
+      url,
+      alt: String(form.get("alt") ?? "").trim().slice(0, 200),
+      width: dim(form.get("width")),
+      height: dim(form.get("height")),
+      bytes: file.size,
+      contentType: file.type,
+      createdAt: new Date().toISOString(),
+    })
+    .catch(() => {});
+  return json({ url, key });
 };

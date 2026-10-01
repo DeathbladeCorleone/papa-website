@@ -1,0 +1,8 @@
+---
+import { repoFrom } from "@/lib/context";
+
+// Open the essay on the public site in preview mode (works for drafts too).
+const post = Astro.params.id ? await repoFrom(Astro.locals).getPostById(Astro.params.id) : null;
+if (!post) return Astro.redirect("/admin/posts");
+return Astro.redirect(`/blog/${post.slug}?preview=1`);
+---

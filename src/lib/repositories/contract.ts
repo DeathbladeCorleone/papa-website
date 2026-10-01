@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type { BlogRepository } from "./types";
 import { buildThreads } from "../domain/comments";
+import { MAX_REVISIONS } from "./types";
+import { DEFAULT_HOME_LAYOUT } from "../domain/home";
+
+const future = () => new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+const past = "2025-06-01T08:00:00.000Z";
 
 /**
  * Behavioral contract every BlogRepository must satisfy. `make` must return a
@@ -236,6 +241,181 @@ export function repositoryContract(name: string, make: () => Promise<BlogReposit
       await repo.clearLoginFailures("1.1.1.1");
       expect(await repo.countLoginFailuresSince("1.1.1.1", before)).toBe(0);
       expect(await repo.countLoginFailuresSince("2.2.2.2", before)).toBe(1);
+    });
+    it("re-slugs a never-published draft when its title changes, but never a published post", async () => {
+      const d = await repo.createPost({ title: "Untitled", bodyHtml: "" });
+      const renamed = await repo.updatePost(d.id, { title: "Monsoon Notes" });
+      expect(renamed.slug).toBe("monsoon-notes");
+      const live = await repo.updatePost(d.id, { status: "published" });
+      const again = await repo.updatePost(live.id, { title: "Different Title" });
+      expect(again.slug).toBe("monsoon-notes");
+      // Unpublished back to draft: the public link already existed, keep it.
+      await repo.updatePost(d.id, { status: "draft" });
+      expect((await repo.updatePost(d.id, { title: "Third" })).slug).toBe("monsoon-notes");
+    });
+
+    // -- scheduling ---------------------------------------------------------
+
+    it("hides a scheduled post from every public query until its time", async () => {
+      const [tag] = await repo.ensureTags(["running"]);
+      const p = await repo.createPost({
+        title: "Tomorrow's essay", bodyHtml: "<p>lighthouse</p>", status: "published",
+        publishedAt: future(), featured: true, categoryId: "cat_life", tagIds: [tag.id],
+      });
+      expect((await repo.listPublished()).map((x) => x.id)).not.toContain(p.id);
+      expect(await repo.countPublished()).toBe(2);
+      expect(await repo.getPublishedBySlug(p.slug)).toBeNull();
+      expect((await repo.getFeatured())?.id).not.toBe(p.id);
+      expect((await repo.listMostRead(10)).map((x) => x.id)).not.toContain(p.id);
+      expect(await repo.searchPublished("lighthouse")).toEqual([]);
+      const runs = await repo.getPublishedBySlug("on-morning-runs");
+      expect((await repo.relatedPosts(runs!)).map((x) => x.id)).not.toContain(p.id);
+      expect((await repo.listAllPosts()).map((x) => x.id)).toContain(p.id);
+
+      await repo.updatePost(p.id, { publishedAt: past });
+      expect((await repo.getPublishedBySlug(p.slug))?.publishedAt).toBe(past);
+      expect((await repo.searchPublished("lighthouse")).map((x) => x.id)).toEqual([p.id]);
+    });
+
+    it("accepts a back-dated publish date", async () => {
+      const p = await repo.createPost({ title: "Old letter", bodyHtml: "<p>x</p>", status: "published", publishedAt: past });
+      expect(p.publishedAt).toBe(past);
+      const all = await repo.listPublished();
+      expect(all[all.length - 1].id).toBe(p.id); // oldest last
+    });
+
+    // -- featured -----------------------------------------------------------
+
+    it("keeps exactly one featured post, or none for 'newest essay'", async () => {
+      const p = await repo.createPost({ title: "New hero", bodyHtml: "<p>x</p>", status: "published", publishedAt: past });
+      await repo.setFeaturedPost(p.id);
+      expect((await repo.getFeatured())?.id).toBe(p.id);
+      expect((await repo.listAllPosts()).filter((x) => x.featured).map((x) => x.id)).toEqual([p.id]);
+      await repo.setFeaturedPost(null);
+      expect((await repo.listAllPosts()).some((x) => x.featured)).toBe(false);
+      expect((await repo.getFeatured())?.slug).toBe("welcome"); // newest
+    });
+
+    // -- revisions ----------------------------------------------------------
+
+    it("keeps the previous version when the body changes", async () => {
+      const p = await repo.createPost({ title: "Draft one", bodyHtml: "<p>first</p>" });
+      expect(await repo.listRevisions(p.id)).toEqual([]);
+      await repo.updatePost(p.id, { bodyHtml: "<p>second</p>" });
+      const revs = await repo.listRevisions(p.id);
+      expect(revs.map((r) => r.bodyHtml)).toEqual(["<p>first</p>"]);
+      expect((await repo.getRevision(revs[0].id))?.title).toBe("Draft one");
+
+      // Rapid autosaves don't flood the history...
+      await repo.updatePost(p.id, { bodyHtml: "<p>third</p>" });
+      expect(await repo.listRevisions(p.id)).toHaveLength(1);
+      // ...but a forced snapshot (before a restore) always lands, newest first.
+      await repo.updatePost(p.id, { bodyHtml: "<p>fourth</p>" }, { forceRevision: true });
+      expect((await repo.listRevisions(p.id)).map((r) => r.bodyHtml)).toEqual(["<p>third</p>", "<p>first</p>"]);
+      // Unchanged content never creates a revision.
+      await repo.updatePost(p.id, { featured: true }, { forceRevision: true });
+      expect(await repo.listRevisions(p.id)).toHaveLength(2);
+    });
+
+    it("prunes old revisions and drops them with the post", async () => {
+      const p = await repo.createPost({ title: "Busy", bodyHtml: "<p>0</p>" });
+      for (let i = 1; i <= MAX_REVISIONS + 3; i++) {
+        await repo.updatePost(p.id, { bodyHtml: `<p>${i}</p>` }, { forceRevision: true });
+      }
+      const revs = await repo.listRevisions(p.id);
+      expect(revs).toHaveLength(MAX_REVISIONS);
+      expect(revs[0].bodyHtml).toBe(`<p>${MAX_REVISIONS + 2}</p>`);
+      await repo.deletePost(p.id);
+      expect(await repo.listRevisions(p.id)).toEqual([]);
+      expect(await repo.getRevision(revs[0].id)).toBeNull();
+    });
+
+    // -- topics -------------------------------------------------------------
+
+    it("counts posts per category and tag", async () => {
+      await repo.createPost({ title: "Draft in ideas", bodyHtml: "<p>x</p>", categoryId: "cat_ideas", tagIds: ["tag_running"] });
+      const counts = await repo.taxonomyCounts();
+      expect(counts.categories).toEqual({ cat_life: 2, cat_ideas: 1 });
+      expect(counts.tags).toEqual({ tag_running: 2, tag_philosophy: 1 });
+    });
+
+    it("renames a category without changing its link", async () => {
+      const c = await repo.renameCategory("cat_life", "Life & Living");
+      expect(c).toEqual({ id: "cat_life", name: "Life & Living", slug: "life" });
+      expect((await repo.getPublishedBySlug("welcome"))?.category?.name).toBe("Life & Living");
+    });
+
+    it("deletes a category, leaving its posts uncategorised", async () => {
+      await repo.deleteCategory("cat_life");
+      expect((await repo.listCategories()).map((c) => c.id)).toEqual(["cat_ideas"]);
+      const post = await repo.getPublishedBySlug("welcome");
+      expect(post?.categoryId).toBeNull();
+      expect(post?.category).toBeNull();
+    });
+
+    it("merges one category into another", async () => {
+      await repo.mergeCategory("cat_life", "cat_ideas");
+      expect((await repo.listCategories()).map((c) => c.id)).toEqual(["cat_ideas"]);
+      expect((await repo.listPublished({ categorySlug: "ideas" })).length).toBe(2);
+    });
+
+    it("renames, merges and deletes tags (and search follows)", async () => {
+      await repo.renameTag("tag_running", "Jogging");
+      expect((await repo.getPublishedBySlug("on-morning-runs"))?.tags.map((t) => t.name)).toEqual(["Jogging"]);
+      expect((await repo.searchPublished("jogging")).map((p) => p.slug)).toEqual(["on-morning-runs"]);
+
+      // welcome has philosophy; give it running too so the merge must de-duplicate.
+      await repo.updatePost("post_welcome", { tagIds: ["tag_philosophy", "tag_running"] });
+      await repo.mergeTag("tag_running", "tag_philosophy");
+      expect((await repo.listTags()).map((t) => t.id)).toEqual(["tag_philosophy"]);
+      expect((await repo.getPostById("post_welcome"))?.tagIds).toEqual(["tag_philosophy"]);
+      expect((await repo.getPostById("post_morning"))?.tagIds).toEqual(["tag_philosophy"]);
+
+      await repo.deleteTag("tag_philosophy");
+      expect(await repo.listTags()).toEqual([]);
+      expect((await repo.getPostById("post_welcome"))?.tagIds).toEqual([]);
+      expect(await repo.searchPublished("philosophy")).toEqual([]);
+    });
+
+    // -- menu ---------------------------------------------------------------
+
+    it("reorders menu pages", async () => {
+      const now = await repo.createPage({ title: "Now", bodyHtml: "<p>n</p>", status: "published" });
+      const books = await repo.createPage({ title: "Books", bodyHtml: "<p>b</p>", status: "published" });
+      await repo.reorderPages([books.id, now.id, "page_about"]);
+      expect((await repo.listMenuPages()).map((p) => p.slug)).toEqual(["books", "now", "about"]);
+    });
+
+    // -- media --------------------------------------------------------------
+
+    it("stores, lists, captions and deletes media", async () => {
+      const base = { url: "", alt: "", width: 800, height: 600, bytes: 1234, contentType: "image/webp" };
+      await repo.addMedia({ ...base, key: "posts/a.webp", url: "/media/posts/a.webp", createdAt: "2026-01-01T00:00:00.000Z" });
+      await repo.addMedia({ ...base, key: "posts/b.webp", url: "/media/posts/b.webp", createdAt: "2026-02-01T00:00:00.000Z" });
+      expect((await repo.listMedia()).map((m) => m.key)).toEqual(["posts/b.webp", "posts/a.webp"]);
+      await repo.updateMediaAlt("posts/a.webp", "A banyan tree");
+      expect((await repo.getMedia("posts/a.webp"))?.alt).toBe("A banyan tree");
+      expect((await repo.getMedia("posts/a.webp"))?.width).toBe(800);
+      await repo.deleteMedia("posts/a.webp");
+      expect(await repo.getMedia("posts/a.webp")).toBeNull();
+      expect(await repo.listMedia()).toHaveLength(1);
+    });
+
+    // -- home layout --------------------------------------------------------
+
+    it("stores the home page layout in settings", async () => {
+      expect((await repo.getSettings()).homeLayout).toEqual(DEFAULT_HOME_LAYOUT);
+      const layout = {
+        ...DEFAULT_HOME_LAYOUT,
+        sections: [...DEFAULT_HOME_LAYOUT.sections].reverse().map((s) => (s.key === "subscribe" ? { ...s, visible: false } : s)),
+        latestCount: 6,
+      };
+      await repo.updateSettings({ homeLayout: layout });
+      const got = (await repo.getSettings()).homeLayout;
+      expect(got.sections.map((s) => s.key)).toEqual(["topics", "latest", "about", "subscribe", "mostRead"]);
+      expect(got.sections.find((s) => s.key === "subscribe")?.visible).toBe(false);
+      expect(got.latestCount).toBe(6);
+      expect((await repo.getSettings()).title).toBe("Pradeep Singh");
     });
   });
 }

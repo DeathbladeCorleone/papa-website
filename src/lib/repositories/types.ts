@@ -3,8 +3,10 @@ import type {
   Comment,
   CommentStatus,
   ContactMessage,
+  MediaItem,
   Page,
   Post,
+  PostRevision,
   PostWithRelations,
   SiteSettings,
   Subscriber,
@@ -29,7 +31,22 @@ export interface CreatePostInput {
   featured?: boolean;
   seoTitle?: string | null;
   seoDescription?: string | null;
+  /**
+   * When the post goes (or went) live. A future time schedules a published post.
+   * Omitted: set to "now" the first time the post is published.
+   */
+  publishedAt?: string | null;
 }
+
+export interface UpdatePostOptions {
+  /** Always keep the current title/body as a revision (used before a restore). */
+  forceRevision?: boolean;
+}
+
+/** Minimum gap between automatic revisions while a post is being edited. */
+export const REVISION_INTERVAL_MS = 10 * 60 * 1000;
+/** Revisions kept per post; older ones are pruned. */
+export const MAX_REVISIONS = 30;
 
 export interface CreateCommentInput {
   postId: string;
@@ -62,8 +79,16 @@ export interface BlogRepository {
   listAllPosts(): Promise<PostWithRelations[]>;
   getPostById(id: string): Promise<PostWithRelations | null>;
   createPost(input: CreatePostInput): Promise<PostWithRelations>;
-  updatePost(id: string, input: Partial<CreatePostInput>): Promise<PostWithRelations>;
+  /**
+   * Update a post. When the title or body changes, the previous version is kept
+   * as a revision (at most one per REVISION_INTERVAL_MS unless forced).
+   */
+  updatePost(id: string, input: Partial<CreatePostInput>, opts?: UpdatePostOptions): Promise<PostWithRelations>;
   deletePost(id: string): Promise<void>;
+  /** Make `id` the only featured (home page hero) post; null = newest essay. */
+  setFeaturedPost(id: string | null): Promise<void>;
+  listRevisions(postId: string): Promise<PostRevision[]>;
+  getRevision(id: string): Promise<PostRevision | null>;
 
   // Taxonomy
   listCategories(): Promise<Category[]>;
@@ -73,6 +98,17 @@ export interface BlogRepository {
   getTagBySlug(slug: string): Promise<Tag | null>;
   /** Get-or-create tags by name, returning their ids. */
   ensureTags(names: string[]): Promise<Tag[]>;
+  /** Number of posts (any status) per category id and per tag id. */
+  taxonomyCounts(): Promise<{ categories: Record<string, number>; tags: Record<string, number> }>;
+  /** Rename keeps the slug, so existing links keep working. */
+  renameCategory(id: string, name: string): Promise<Category>;
+  /** Posts in the category become uncategorised. */
+  deleteCategory(id: string): Promise<void>;
+  /** Move every post from `fromId` into `intoId`, then delete `fromId`. */
+  mergeCategory(fromId: string, intoId: string): Promise<void>;
+  renameTag(id: string, name: string): Promise<Tag>;
+  deleteTag(id: string): Promise<void>;
+  mergeTag(fromId: string, intoId: string): Promise<void>;
 
   // Pages
   listMenuPages(): Promise<Page[]>;
@@ -82,6 +118,8 @@ export interface BlogRepository {
   createPage(input: { title: string; bodyHtml: string; status?: Page["status"]; showInMenu?: boolean; menuOrder?: number }): Promise<Page>;
   updatePage(id: string, input: Partial<{ title: string; bodyHtml: string; status: Page["status"]; showInMenu: boolean; menuOrder: number }>): Promise<Page>;
   deletePage(id: string): Promise<void>;
+  /** Set menu order to the position of each id in `ids`. */
+  reorderPages(ids: string[]): Promise<void>;
 
   // Comments
   listApprovedForPost(postId: string): Promise<Comment[]>;
@@ -97,6 +135,13 @@ export interface BlogRepository {
   markMessageRead(id: string, read: boolean): Promise<void>;
   addSubscriber(email: string): Promise<{ created: boolean }>;
   listSubscribers(): Promise<Subscriber[]>;
+
+  // Media library
+  addMedia(item: MediaItem): Promise<MediaItem>;
+  listMedia(): Promise<MediaItem[]>;
+  getMedia(key: string): Promise<MediaItem | null>;
+  updateMediaAlt(key: string, alt: string): Promise<void>;
+  deleteMedia(key: string): Promise<void>;
 
   // Settings
   getSettings(): Promise<SiteSettings>;

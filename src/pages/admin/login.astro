@@ -1,47 +1,63 @@
 ---
 import "@/styles/theme.css";
-import { envFrom } from "@/lib/context";
+import "@/styles/admin.css";
+import { envFrom, repoFrom } from "@/lib/context";
 import { authConfig } from "@/lib/auth";
+
 const error = Astro.url.searchParams.get("error");
 const cfg = authConfig(envFrom(Astro.locals), import.meta.env.DEV);
 const devLogin = cfg?.devPassword != null;
 const messages: Record<string, string> = {
-  "1": "Incorrect email or password.",
-  locked: "Too many attempts. Please wait 15 minutes and try again.",
-  config: "Admin login isn't set up yet. Ask whoever runs this site to configure it.",
+  "1": "That email or password isn't right. Please try again.",
+  locked: "Too many tries. Please wait 15 minutes, then try again.",
+  config: "Signing in isn't set up yet. Ask whoever runs this website to configure it.",
 };
-// Already logged in? Go to the dashboard.
 if (Astro.locals.admin) return Astro.redirect("/admin");
+const settings = await repoFrom(Astro.locals).getSettings().catch(() => null);
+const siteTitle = settings?.title ?? "Dashboard";
 ---
 <!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Sign in · Admin</title>
+    <meta name="robots" content="noindex" />
+    <title>Sign in · {siteTitle}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet" />
   </head>
-  <body style="display:grid;place-items:center;min-height:100vh">
-    <main style="width:min(24rem,90vw)">
-      <h1 style="text-align:center">Sign in</h1>
-      {!cfg && <p class="notice err">{messages.config}</p>}
-      {cfg && error && <p class="notice err">{messages[error] ?? messages["1"]}</p>}
-      {devLogin && (
-        <p class="notice info small">Local development — sign in with <code>{cfg?.email}</code> / <code>changeme</code>.</p>
-      )}
-      <form method="POST" action="/api/admin/login" class="stack" style="margin-top:1rem">
-        <div class="field">
-          <label for="email">Email</label>
-          <input type="email" id="email" name="email" required autocomplete="username" />
+  <body class="admin">
+    <main class="a-login">
+      <section class="art">
+        <div>
+          <div class="wm">{siteTitle}</div>
+          <div class="tl">Writer's desk</div>
         </div>
-        <div class="field">
-          <label for="password">Password</label>
-          <input type="password" id="password" name="password" required autocomplete="current-password" />
+        <blockquote>“Writing is how I think.”</blockquote>
+        <div class="foot">Sign in to write, publish and reply to readers</div>
+      </section>
+      <section class="form">
+        <div>
+          <div class="a-kicker">Welcome back</div>
+          <h1>Sign in</h1>
+          {!cfg && <p class="a-notice err">{messages.config}</p>}
+          {cfg && error && <p class="a-notice err">{messages[error] ?? messages["1"]}</p>}
+          {devLogin && <p class="a-notice">Local preview — use <code>{cfg?.email}</code> / <code>changeme</code>.</p>}
+          <form method="POST" action="/api/admin/login" class="a-form" style="margin-top:26px">
+            <div class="a-field">
+              <label for="email">Email</label>
+              <input type="email" id="email" name="email" required autocomplete="username" autofocus />
+            </div>
+            <div class="a-field">
+              <label for="password">Password</label>
+              <input type="password" id="password" name="password" required autocomplete="current-password" />
+            </div>
+            <button class="a-btn" type="submit" style="width:100%;min-height:48px">Sign in</button>
+          </form>
+          <p style="margin-top:28px;font-size:13.5px"><a href="/">← Back to the website</a></p>
         </div>
-        <button class="btn" type="submit" style="width:100%">Sign in</button>
-      </form>
-      <p class="center small muted" style="margin-top:1.5rem"><a href="/">← Back to site</a></p>
+      </section>
     </main>
   </body>
 </html>

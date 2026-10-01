@@ -1,18 +1,22 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
-import PostForm from "@/components/admin/PostForm.astro";
+import PostEditor from "@/components/admin/editor/PostEditor.tsx";
 import { repoFrom } from "@/lib/context";
 
 const repo = repoFrom(Astro.locals);
-const [categories, pending] = await Promise.all([
-  repo.listCategories(),
-  repo.listCommentsByStatus("pending"),
-]);
-const error = Astro.url.searchParams.get("error");
+const [categories, tags] = await Promise.all([repo.listCategories(), repo.listTags()]);
+const initial = {
+  id: null, slug: "", title: "", excerpt: "", bodyHtml: "", coverUrl: null, categoryId: null, tags: [],
+  featured: false, seoTitle: null, seoDescription: null, status: "draft" as const, publishedAt: null, updatedAt: null, state: "draft" as const,
+};
 ---
 
-<AdminLayout title="New post" pending={pending.length}>
-  <h1>New post</h1>
-  {error === "title" && <p class="notice err">Please enter a title.</p>}
-  <PostForm categories={categories} />
+<AdminLayout title="New essay" bare>
+  <PostEditor
+    client:only="react"
+    kind="post"
+    initial={initial}
+    categories={categories.map((c) => ({ id: c.id, name: c.name }))}
+    allTags={tags.map((t) => t.name)}
+  />
 </AdminLayout>

@@ -3,37 +3,58 @@ import AdminLayout from "@/layouts/AdminLayout.astro";
 import ImageField from "@/components/admin/ImageField.tsx";
 import { repoFrom } from "@/lib/context";
 
-const repo = repoFrom(Astro.locals);
-const [settings, pending] = await Promise.all([
-  repo.getSettings(),
-  repo.listCommentsByStatus("pending"),
-]);
-const saved = Astro.url.searchParams.get("saved");
+const settings = await repoFrom(Astro.locals).getSettings();
 ---
-<AdminLayout title="Settings" pending={pending.length}>
-  <h1>Site settings</h1>
-  {saved && <p class="notice ok">Settings saved.</p>}
-  <form method="POST" action="/api/admin/settings" class="stack" style="max-width:34rem">
-    <div class="field">
-      <label for="title">Site title</label>
-      <input type="text" id="title" name="title" required value={settings.title} />
+<AdminLayout title="Settings">
+  <header class="a-head">
+    <div>
+      <div class="a-kicker">Website</div>
+      <h1>Settings</h1>
+      <p class="lede">The name of the website, how you appear on it, and what Google shows. The home page layout and menu have their own pages.</p>
     </div>
-    <div class="field">
-      <label for="tagline">Tagline <span class="muted">(shown under the title)</span></label>
-      <input type="text" id="tagline" name="tagline" value={settings.tagline} />
-    </div>
-    <div class="field">
-      <label>Author photo <span class="muted">(shown in “About me” on the home page)</span></label>
-      <ImageField client:load name="author_photo_url" initialUrl={settings.authorPhotoUrl ?? ""} aspect="4 / 5" hint="A portrait in natural light." />
-    </div>
-    <div class="field">
-      <label for="author_name">Author name <span class="muted">(byline &amp; comment replies)</span></label>
-      <input type="text" id="author_name" name="author_name" required value={settings.authorName} />
-    </div>
-    <div class="field">
-      <label for="description">Site description <span class="muted">(default SEO description)</span></label>
-      <textarea id="description" name="description" style="min-height:4rem">{settings.description}</textarea>
-    </div>
-    <button class="btn" type="submit" style="align-self:flex-start">Save settings</button>
+  </header>
+
+  <form method="POST" action="/api/admin/settings">
+    <section class="a-settings">
+      <div class="intro"><h2>The website</h2><p>Shown at the top of every page and in the browser tab.</p></div>
+      <div class="a-form">
+        <div class="a-field">
+          <label for="title">Website name</label>
+          <input type="text" id="title" name="title" required value={settings.title} />
+        </div>
+        <div class="a-field">
+          <label for="tagline">Tagline</label>
+          <input type="text" id="tagline" name="tagline" value={settings.tagline} placeholder="e.g. Essays and reflections" />
+          <div class="hint">A few words under the name. Leave empty for none.</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="a-settings">
+      <div class="intro"><h2>About you</h2><p>Your name signs every essay and your replies to comments.</p></div>
+      <div class="a-form">
+        <div class="a-field">
+          <label for="author_name">Your name</label>
+          <input type="text" id="author_name" name="author_name" required value={settings.authorName} />
+        </div>
+        <div class="a-field">
+          <span class="lbl">Your photo</span>
+          <ImageField client:load name="author_photo_url" initialUrl={settings.authorPhotoUrl ?? ""} aspect="4 / 5" title="Choose your photo" hint="Shown beside “About me” on the home page. A portrait in natural light works best." />
+        </div>
+      </div>
+    </section>
+
+    <section class="a-settings">
+      <div class="intro"><h2>Google &amp; sharing</h2><p>Used when an essay or page doesn't have its own description.</p></div>
+      <div class="a-form">
+        <div class="a-field">
+          <label for="description">Website description</label>
+          <textarea id="description" name="description" rows="3" maxlength="220">{settings.description}</textarea>
+          <div class="hint">One or two sentences about what you write. Around 150 characters is ideal.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="a-savebar"><button class="a-btn" type="submit">Save settings</button></div>
   </form>
 </AdminLayout>

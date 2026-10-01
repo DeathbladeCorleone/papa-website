@@ -1,92 +1,128 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
+import Icon from "@/components/admin/Icon.astro";
 import { repoFrom } from "@/lib/context";
 import { formatDate } from "@/lib/format";
 import { renderCommentBody } from "@/lib/domain/html";
+import type { Comment } from "@/lib/domain/types";
 
 const repo = repoFrom(Astro.locals);
-const [pending, approved, posts] = await Promise.all([
+const [pending, approved, spam, posts] = await Promise.all([
   repo.listCommentsByStatus("pending"),
   repo.listCommentsByStatus("approved"),
+  repo.listCommentsByStatus("spam"),
   repo.listAllPosts(),
 ]);
 const postMap = new Map(posts.map((p) => [p.id, p]));
-const backTo = "/admin/comments";
+const show = (Astro.url.searchParams.get("show") ?? (pending.length ? "pending" : "approved")) as "pending" | "approved" | "spam";
+const lists = { pending, approved: approved.filter((c) => !c.isAuthor), spam };
+const items = lists[show] ?? pending;
+const repliesTo = (c: Comment) => approved.filter((r) => r.parentId === c.id);
+const back = `/admin/comments?show=${show}`;
+const tabs = [
+  { key: "pending", label: "Waiting for you", n: pending.length },
+  { key: "approved", label: "On the website", n: lists.approved.length },
+  { key: "spam", label: "Spam", n: spam.length },
+];
+const initial = (name: string) => (name.trim().charAt(0) || "?").toUpperCase();
 ---
 
-<AdminLayout title="Comments" pending={pending.length}>
-  <h1>Comments</h1>
+<AdminLayout title="Comments">
+  <header class="a-head">
+    <div>
+      <div class="a-kicker">Readers</div>
+      <h1>Comments</h1>
+      <p class="lede">New comments wait here until you approve them. Your replies appear under the comment, marked as yours.</p>
+    </div>
+  </header>
 
-  <h2 style="font-family:var(--sans);font-size:1.1rem">Awaiting review ({pending.length})</h2>
-  {pending.length === 0 && <p class="muted">Nothing to review right now.</p>}
-  {pending.map((c) => {
-    const post = postMap.get(c.postId);
-    return (
-      <div class="stat" style="margin-bottom:1rem">
-        <div class="small muted">
-          On <a href={post ? `/blog/${post.slug}#c-${c.id}` : "#"}>{post?.title ?? "post"}</a> · {formatDate(c.createdAt)}
-        </div>
-        <div><strong>{c.authorName}</strong> <span class="muted small">&lt;{c.authorEmail}&gt;</span></div>
-        <div class="body" set:html={renderCommentBody(c.body)} style="margin:0.4rem 0" />
-        <div class="toolbar" style="margin:0.5rem 0 0">
-          <form class="inline-form" method="POST" action="/api/admin/comments">
-            <input type="hidden" name="_action" value="approve" />
-            <input type="hidden" name="id" value={c.id} />
-            <input type="hidden" name="return_to" value={backTo} />
-            <button class="btn small" type="submit">Approve</button>
-          </form>
-          <form class="inline-form" method="POST" action="/api/admin/comments">
-            <input type="hidden" name="_action" value="spam" />
-            <input type="hidden" name="id" value={c.id} />
-            <input type="hidden" name="return_to" value={backTo} />
-            <button class="btn secondary small" type="submit">Mark spam</button>
-          </form>
-          <form class="inline-form" method="POST" action="/api/admin/comments" data-confirm="Delete this comment?">
-            <input type="hidden" name="_action" value="delete" />
-            <input type="hidden" name="id" value={c.id} />
-            <input type="hidden" name="return_to" value={backTo} />
-            <button class="btn danger small" type="submit">Delete</button>
-          </form>
-        </div>
-        <details style="margin-top:0.5rem">
-          <summary class="small" style="cursor:pointer">Reply</summary>
-          <form method="POST" action="/api/admin/comments" class="stack" style="margin-top:0.5rem">
-            <input type="hidden" name="_action" value="reply" />
-            <input type="hidden" name="post_id" value={c.postId} />
-            <input type="hidden" name="parent_id" value={c.id} />
-            <input type="hidden" name="return_to" value={backTo} />
-            <textarea name="body" required placeholder="Write a reply (auto-published as the author)…" style="min-height:4rem"></textarea>
-            <button class="btn small" type="submit" style="align-self:flex-start">Post reply &amp; approve thread</button>
-          </form>
-        </details>
-      </div>
-    );
-  })}
+  <nav class="a-tabs" aria-label="Comment lists">
+    {tabs.filter((t) => t.key !== "spam" || t.n > 0 || show === "spam").map((t) => (
+      <a href={`/admin/comments?show=${t.key}`} aria-current={show === t.key ? "page" : undefined}>{t.label}<span class="n">{t.n}</span></a>
+    ))}
+  </nav>
 
-  <h2 style="font-family:var(--sans);font-size:1.1rem;margin-top:2rem">Published ({approved.length})</h2>
-  <table class="admin-table">
-    <tbody>
-      {approved.map((c) => {
+  {items.length === 0 ? (
+    <div class="a-empty">
+      <h3>{show === "pending" ? "You're all caught up" : "Nothing here"}</h3>
+      <p>{show === "pending" ? "When a reader leaves a comment, it will wait here for you." : "No comments in this list."}</p>
+    </div>
+  ) : (
+    <div class="a-items">
+      {items.map((c) => {
         const post = postMap.get(c.postId);
+        const replies = repliesTo(c);
+        const parent = c.parentId ? approved.find((x) => x.id === c.parentId) ?? pending.find((x) => x.id === c.parentId) : null;
         return (
-          <tr>
-            <td>
-              <strong>{c.authorName}</strong>{c.isAuthor && <span class="pill" style="margin-left:0.4rem">author</span>}
-              <div class="small muted" set:html={renderCommentBody(c.body)} />
-            </td>
-            <td class="small"><a href={post ? `/blog/${post.slug}` : "#"}>{post?.title ?? "post"}</a></td>
-            <td>
-              <form class="inline-form" method="POST" action="/api/admin/comments" data-confirm="Delete this comment?">
-                <input type="hidden" name="_action" value="delete" />
-                <input type="hidden" name="id" value={c.id} />
-                <input type="hidden" name="return_to" value={backTo} />
-                <button class="btn danger small" type="submit">Delete</button>
-              </form>
-            </td>
-          </tr>
+          <article class="a-item">
+            <div class="a-avatar" aria-hidden="true">{initial(c.authorName)}</div>
+            <div>
+              <div class="who">
+                <b>{c.authorName}</b>
+                <a class="s" href={`mailto:${c.authorEmail}`}>{c.authorEmail}</a>
+                <span class="s">{formatDate(c.createdAt)}</span>
+              </div>
+              <div class="on">
+                {parent ? <>Replying to {parent.authorName} on </> : <>On </>}
+                {post ? <a href={`/blog/${post.slug}#c-${c.id}`} target="_blank" rel="noopener">{post.title}</a> : "a deleted essay"}
+              </div>
+              <div class="body" set:html={renderCommentBody(c.body)} />
+              {replies.map((r) => (
+                <div class="a-thread-reply"><div class="by">Your reply · {formatDate(r.createdAt)}</div><div set:html={renderCommentBody(r.body)} /></div>
+              ))}
+              <div class="acts">
+                {show !== "approved" && (
+                  <form method="POST" action="/api/admin/comments">
+                    <input type="hidden" name="_action" value="approve" />
+                    <input type="hidden" name="id" value={c.id} />
+                    <input type="hidden" name="return_to" value={`${back}&updated=1`} />
+                    <button class="a-btn sm" type="submit"><Icon name="check" size={16} /> {show === "spam" ? "Not spam — approve" : "Approve"}</button>
+                  </form>
+                )}
+                {show !== "spam" && !c.parentId && (
+                  <button class="a-btn ghost sm" type="button" data-reply={c.id}><Icon name="chat" size={16} /> Reply</button>
+                )}
+                {show === "pending" && (
+                  <form method="POST" action="/api/admin/comments">
+                    <input type="hidden" name="_action" value="spam" />
+                    <input type="hidden" name="id" value={c.id} />
+                    <input type="hidden" name="return_to" value={`${back}&updated=1`} />
+                    <button class="a-btn quiet sm" type="submit">Spam</button>
+                  </form>
+                )}
+                <form method="POST" action="/api/admin/comments" data-confirm="Delete this comment (and any replies) for good?">
+                  <input type="hidden" name="_action" value="delete" />
+                  <input type="hidden" name="id" value={c.id} />
+                  <input type="hidden" name="return_to" value={`${back}&deleted=1`} />
+                  <button class="a-btn quiet sm" type="submit"><Icon name="trash" size={16} /> Delete</button>
+                </form>
+              </div>
+              {!c.parentId && (
+                <form class="a-reply" method="POST" action="/api/admin/comments" id={`reply-${c.id}`} hidden>
+                  <input type="hidden" name="_action" value="reply" />
+                  <input type="hidden" name="post_id" value={c.postId} />
+                  <input type="hidden" name="parent_id" value={c.id} />
+                  <input type="hidden" name="return_to" value={`/admin/comments?show=approved&saved=1`} />
+                  <textarea name="body" required rows="3" placeholder={`Write your reply to ${c.authorName}…`}></textarea>
+                  <div class="row">
+                    <button class="a-btn quiet sm" type="button" data-reply-cancel={c.id}>Cancel</button>
+                    <button class="a-btn sm" type="submit">{show === "pending" ? "Approve and reply" : "Post reply"}</button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </article>
         );
       })}
-      {approved.length === 0 && <tr><td class="muted">No published comments yet.</td></tr>}
-    </tbody>
-  </table>
+    </div>
+  )}
+  <script is:inline>
+    document.addEventListener("click", (e) => {
+      const t = e.target instanceof Element ? e.target : null;
+      const open = t && t.closest("[data-reply]");
+      const cancel = t && t.closest("[data-reply-cancel]");
+      if (open) { const f = document.getElementById("reply-" + open.dataset.reply); f.hidden = false; f.querySelector("textarea").focus(); }
+      if (cancel) document.getElementById("reply-" + cancel.dataset.replyCancel).hidden = true;
+    });
+  </script>
 </AdminLayout>

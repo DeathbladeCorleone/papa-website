@@ -1,29 +1,47 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
+import Icon from "@/components/admin/Icon.astro";
 import { repoFrom } from "@/lib/context";
 import { formatDate } from "@/lib/format";
 
-const repo = repoFrom(Astro.locals);
-const [subscribers, pending] = await Promise.all([
-  repo.listSubscribers(),
-  repo.listCommentsByStatus("pending"),
-]);
+const subscribers = await repoFrom(Astro.locals).listSubscribers();
 const csv = "data:text/csv;charset=utf-8," +
   encodeURIComponent("email,subscribed_at\n" + subscribers.map((s) => `${s.email},${s.createdAt}`).join("\n"));
+const monthAgo = new Date(Date.now() - 30 * 864e5).toISOString();
+const recent = subscribers.filter((s) => s.createdAt >= monthAgo).length;
 ---
-<AdminLayout title="Subscribers" pending={pending.length}>
-  <div class="toolbar" style="justify-content:space-between">
-    <h1 style="margin:0">Subscribers ({subscribers.length})</h1>
-    {subscribers.length > 0 && <a class="btn secondary" href={csv} download="subscribers.csv">Export CSV</a>}
-  </div>
-  <p class="muted small">Emails collected from the subscribe box. No emails are sent yet — export this list into a newsletter tool when you're ready.</p>
-  <table class="admin-table">
-    <thead><tr><th>Email</th><th>Since</th></tr></thead>
-    <tbody>
-      {subscribers.map((s) => (
-        <tr><td>{s.email}</td><td class="muted">{formatDate(s.createdAt)}</td></tr>
-      ))}
-      {subscribers.length === 0 && <tr><td colspan="2" class="muted">No subscribers yet.</td></tr>}
-    </tbody>
-  </table>
+
+<AdminLayout title="Subscribers">
+  <header class="a-head">
+    <div>
+      <div class="a-kicker">Readers</div>
+      <h1>Subscribers</h1>
+      <p class="lede">People who left their email in the Subscribe box. No emails are sent yet — when you're ready for a newsletter, download this list.</p>
+    </div>
+    {subscribers.length > 0 && (
+      <div class="actions"><a class="a-btn ghost" href={csv} download="subscribers.csv"><Icon name="download" size={16} /> Download list</a></div>
+    )}
+  </header>
+
+  {subscribers.length === 0 ? (
+    <div class="a-empty">
+      <h3>No subscribers yet</h3>
+      <p>The Subscribe box is on the home page and under every essay.</p>
+    </div>
+  ) : (
+    <>
+      <div class="a-stats" style="grid-template-columns:repeat(2,minmax(0,1fr));max-width:520px;margin-top:28px">
+        <div class="a-stat"><div class="n">{subscribers.length}</div><div class="l">In total</div></div>
+        <div class="a-stat"><div class="n">{recent}</div><div class="l">In the last 30 days</div></div>
+      </div>
+      <table class="a-table" style="margin-top:28px">
+        <thead><tr><th>Email</th><th style="text-align:right">Joined</th></tr></thead>
+        <tbody>
+          {subscribers.map((s) => (
+            <tr><td><a href={`mailto:${s.email}`}>{s.email}</a></td><td style="text-align:right;color:var(--ink-faint)">{formatDate(s.createdAt)}</td></tr>
+          ))}
+        </tbody>
+      </table>
+    </>
+  )}
 </AdminLayout>

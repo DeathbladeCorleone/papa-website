@@ -3,13 +3,17 @@ import type {
   Comment,
   CommentStatus,
   ContactMessage,
+  MediaItem,
   Page,
+  PostRevision,
   PostWithRelations,
   SiteSettings,
   Subscriber,
   Tag,
 } from "../domain/types";
-import type { BlogRepository, CreateCommentInput, CreatePostInput, ListPostsOptions } from "./types";
+import type { BlogRepository, CreateCommentInput, CreatePostInput, ListPostsOptions, UpdatePostOptions } from "./types";
+import { MAX_REVISIONS, REVISION_INTERVAL_MS } from "./types";
+import { normalizeHomeLayout } from "../domain/home";
 import type { SqlDatabase, SqlStatement } from "../bindings";
 import type { SeedData } from "./memory";
 import { uniqueSlug } from "../domain/slug";
@@ -78,6 +82,30 @@ function mapSettings(r: Row): SiteSettings {
     description: String(r.description),
     authorName: String(r.author_name),
     authorPhotoUrl: str(r.author_photo_url),
+    homeLayout: normalizeHomeLayout(r.home_layout),
+  };
+}
+
+function mapMedia(r: Row): MediaItem {
+  return {
+    key: String(r.key),
+    url: String(r.url),
+    alt: String(r.alt ?? ""),
+    width: r.width == null ? null : Number(r.width),
+    height: r.height == null ? null : Number(r.height),
+    bytes: Number(r.bytes ?? 0),
+    contentType: String(r.content_type),
+    createdAt: String(r.created_at),
+  };
+}
+
+function mapRevision(r: Row): PostRevision {
+  return {
+    id: String(r.id),
+    postId: String(r.post_id),
+    title: String(r.title),
+    bodyHtml: String(r.body_html),
+    createdAt: String(r.created_at),
   };
 }
 
@@ -86,6 +114,8 @@ const POST_FROM = `
   SELECT p.*, c.id AS c_id, c.name AS c_name, c.slug AS c_slug
   FROM posts p LEFT JOIN categories c ON c.id = p.category_id`;
 const PUBLISHED_ORDER = "COALESCE(p.published_at, p.created_at) DESC, p.id";
+/** Visible to readers: published, and its publish time has arrived (scheduled posts wait). */
+const LIVE = "p.status = 'published' AND COALESCE(p.published_at, p.created_at) <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
 
 function mapPost(r: Row, tags: Tag[]): PostWithRelations {
   return {
@@ -104,6 +134,7 @@ function mapPost(r: Row, tags: Tag[]): PostWithRelations {
     publishedAt: str(r.published_at),
     createdAt: String(r.created_at),
     updatedAt: String(r.updated_at),
+    views: Number(r.views ?? 0),
     category: r.c_id ? { id: String(r.c_id), name: String(r.c_name), slug: String(r.c_slug) } : null,
     tags,
   };
@@ -148,9 +179,14 @@ export class D1Repository implements BlogRepository {
     return rows.map((r) => mapPost(r, byPost.get(String(r.id)) ?? []));
   }
 
-  private async uniqueSlugFor(table: "posts" | "pages" | "categories" | "tags", text: string): Promise<string> {
+  private async uniqueSlugFor(table: "posts" | "pages" | "categories" | "tags", text: string, exceptId = ""): Promise<string> {
     const base = uniqueSlug(text, []);
-    const taken = await this.rows(`SELECT slug FROM ${table} WHERE slug = ? OR slug LIKE ?`, base, `${base}-%`);
+    const taken = await this.rows(
+      `SELECT slug FROM ${table} WHERE (slug = ? OR slug LIKE ?) AND id != ?`,
+      base,
+      `${base}-%`,
+      exceptId,
+    );
     return uniqueSlug(text, taken.map((r) => String(r.slug)));
   }
 
@@ -171,6 +207,15 @@ export class D1Repository implements BlogRepository {
     ];
   }
 
+  /** Rebuild the search rows of several posts (e.g. after a tag rename). */
+  private ftsSyncMany(postIds: string[]): SqlStatement[] {
+    return postIds.flatMap((pid) => this.ftsSync(pid));
+  }
+
+  private async postIdsWithTag(tagId: string): Promise<string[]> {
+    return (await this.rows("SELECT post_id FROM post_tags WHERE tag_id = ?", tagId)).map((r) => String(r.post_id));
+  }
+
   private tagStatements(postId: string, tagIds: string[]): SqlStatement[] {
     return [
       this.db.prepare("DELETE FROM post_tags WHERE post_id = ?").bind(postId),
@@ -181,7 +226,7 @@ export class D1Repository implements BlogRepository {
   }
 
   private publishedFilter(opts: ListPostsOptions): { where: string; params: unknown[] } {
-    let where = "p.status = 'published'";
+    let where = LIVE;
     const params: unknown[] = [];
     if (opts.categorySlug) {
       where += " AND c.slug = ?";
@@ -218,13 +263,13 @@ export class D1Repository implements BlogRepository {
   }
 
   async getPublishedBySlug(slug: string): Promise<PostWithRelations | null> {
-    const r = await this.row(`${POST_FROM} WHERE p.slug = ? AND p.status = 'published'`, slug);
+    const r = await this.row(`${POST_FROM} WHERE p.slug = ? AND ${LIVE}`, slug);
     return r ? (await this.hydrate([r]))[0] : null;
   }
 
   async getFeatured(): Promise<PostWithRelations | null> {
     const r = await this.row(
-      `${POST_FROM} WHERE p.status = 'published' ORDER BY p.featured DESC, ${PUBLISHED_ORDER} LIMIT 1`,
+      `${POST_FROM} WHERE ${LIVE} ORDER BY p.featured DESC, ${PUBLISHED_ORDER} LIMIT 1`,
     );
     return r ? (await this.hydrate([r]))[0] : null;
   }
@@ -237,7 +282,7 @@ export class D1Repository implements BlogRepository {
            + (SELECT COUNT(*) FROM post_tags pt WHERE pt.post_id = p.id
                 AND pt.tag_id IN (SELECT value FROM json_each(?))) AS score
          FROM posts p LEFT JOIN categories c ON c.id = p.category_id
-         WHERE p.status = 'published' AND p.id != ?
+         WHERE ${LIVE} AND p.id != ?
        ) WHERE score > 0
        ORDER BY score DESC, COALESCE(published_at, created_at) DESC
        LIMIT ?`,
@@ -250,13 +295,13 @@ export class D1Repository implements BlogRepository {
   }
 
   async recordView(postId: string): Promise<void> {
-    await this.db.prepare("UPDATE posts SET views = views + 1 WHERE id = ? AND status = 'published'").bind(postId).run();
+    await this.db.prepare(`UPDATE posts AS p SET views = views + 1 WHERE p.id = ? AND ${LIVE}`).bind(postId).run();
   }
 
   async listMostRead(limit: number, excludeIds: string[] = []): Promise<PostWithRelations[]> {
     const rows = await this.rows(
       `${POST_FROM}
-       WHERE p.status = 'published' AND p.id NOT IN (SELECT value FROM json_each(?))
+       WHERE ${LIVE} AND p.id NOT IN (SELECT value FROM json_each(?))
        ORDER BY p.views DESC, ${PUBLISHED_ORDER}
        LIMIT ?`,
       JSON.stringify(excludeIds),
@@ -273,7 +318,7 @@ export class D1Repository implements BlogRepository {
        FROM posts_fts
        JOIN posts p ON p.id = posts_fts.post_id
        LEFT JOIN categories c ON c.id = p.category_id
-       WHERE posts_fts MATCH ? AND p.status = 'published'
+       WHERE posts_fts MATCH ? AND ${LIVE}
        ORDER BY bm25(posts_fts, 5.0, 2.0, 1.0, 3.0, 0.0)
        LIMIT 50`,
       match,
@@ -317,7 +362,7 @@ export class D1Repository implements BlogRepository {
           input.featured ? 1 : 0,
           input.seoTitle ?? null,
           input.seoDescription ?? null,
-          status === "published" ? ts : null,
+          input.publishedAt ?? (status === "published" ? ts : null),
           ts,
           ts,
         ),
@@ -327,25 +372,33 @@ export class D1Repository implements BlogRepository {
     return (await this.getPostById(id))!;
   }
 
-  async updatePost(id: string, input: Partial<CreatePostInput>): Promise<PostWithRelations> {
+  async updatePost(id: string, input: Partial<CreatePostInput>, opts: UpdatePostOptions = {}): Promise<PostWithRelations> {
     const cur = await this.getPostById(id);
     if (!cur) throw new Error(`Post ${id} not found`);
 
     const bodyHtml = input.bodyHtml ?? cur.bodyHtml;
     const status = input.status ?? cur.status;
-    const publishedAt = status === "published" && !cur.publishedAt ? now() : cur.publishedAt;
+    let publishedAt = status === "published" && !cur.publishedAt ? now() : cur.publishedAt;
+    if (input.publishedAt !== undefined) publishedAt = input.publishedAt ?? (status === "published" ? now() : null);
+    const revision = await this.revisionStatements(cur, input, opts);
+    // A draft that has never been published has no public link yet: keep its slug in step with the title.
+    const slug =
+      input.title !== undefined && input.title !== cur.title && cur.status === "draft" && !cur.publishedAt
+        ? await this.uniqueSlugFor("posts", input.title, id)
+        : cur.slug;
     const excerpt =
       input.excerpt !== undefined ? input.excerpt.trim() || excerptFromHtml(bodyHtml) : cur.excerpt;
 
     await this.db.batch([
       this.db
         .prepare(
-          `UPDATE posts SET title = ?, excerpt = ?, body_html = ?, body_text = ?, cover_url = ?,
+          `UPDATE posts SET slug = ?, title = ?, excerpt = ?, body_html = ?, body_text = ?, cover_url = ?,
              category_id = ?, status = ?, featured = ?, seo_title = ?, seo_description = ?,
              published_at = ?, updated_at = ?
            WHERE id = ?`,
         )
         .bind(
+          slug,
           input.title ?? cur.title,
           excerpt,
           bodyHtml,
@@ -362,8 +415,56 @@ export class D1Repository implements BlogRepository {
         ),
       ...(input.tagIds !== undefined ? this.tagStatements(id, input.tagIds) : []),
       ...this.ftsSync(id),
+      ...revision,
     ]);
     return (await this.getPostById(id))!;
+  }
+
+  /** Statements that keep the current title/body as a revision, when due. */
+  private async revisionStatements(
+    cur: PostWithRelations,
+    input: Partial<CreatePostInput>,
+    opts: UpdatePostOptions,
+  ): Promise<SqlStatement[]> {
+    const changed =
+      (input.title !== undefined && input.title !== cur.title) ||
+      (input.bodyHtml !== undefined && input.bodyHtml !== cur.bodyHtml);
+    if (!changed) return [];
+    const latest = await this.row(
+      "SELECT created_at FROM post_revisions WHERE post_id = ? ORDER BY created_at DESC LIMIT 1",
+      cur.id,
+    );
+    const latestAt = latest ? String(latest.created_at) : null;
+    if (!opts.forceRevision && latestAt && Date.now() - Date.parse(latestAt) < REVISION_INTERVAL_MS) return [];
+    // Strictly increasing timestamps keep "newest first" stable within one millisecond.
+    let ts = now();
+    if (latestAt && ts <= latestAt) ts = new Date(Date.parse(latestAt) + 1).toISOString();
+    return [
+      this.db
+        .prepare("INSERT INTO post_revisions (id, post_id, title, body_html, created_at) VALUES (?, ?, ?, ?, ?)")
+        .bind(newId(), cur.id, cur.title, cur.bodyHtml, ts),
+      this.db
+        .prepare(
+          `DELETE FROM post_revisions WHERE post_id = ? AND id NOT IN (
+             SELECT id FROM post_revisions WHERE post_id = ? ORDER BY created_at DESC LIMIT ?)`,
+        )
+        .bind(cur.id, cur.id, MAX_REVISIONS),
+    ];
+  }
+
+  async listRevisions(postId: string): Promise<PostRevision[]> {
+    return (
+      await this.rows("SELECT * FROM post_revisions WHERE post_id = ? ORDER BY created_at DESC", postId)
+    ).map(mapRevision);
+  }
+
+  async getRevision(id: string): Promise<PostRevision | null> {
+    const r = await this.row("SELECT * FROM post_revisions WHERE id = ?", id);
+    return r ? mapRevision(r) : null;
+  }
+
+  async setFeaturedPost(id: string | null): Promise<void> {
+    await this.db.prepare("UPDATE posts SET featured = CASE WHEN id = ? THEN 1 ELSE 0 END").bind(id).run();
   }
 
   async deletePost(id: string): Promise<void> {
@@ -391,6 +492,64 @@ export class D1Repository implements BlogRepository {
     const cat: Category = { id: newId(), name: name.trim(), slug: await this.uniqueSlugFor("categories", name) };
     await this.db.prepare("INSERT INTO categories (id, name, slug) VALUES (?, ?, ?)").bind(cat.id, cat.name, cat.slug).run();
     return cat;
+  }
+
+  async taxonomyCounts(): Promise<{ categories: Record<string, number>; tags: Record<string, number> }> {
+    const [cats, tags] = await Promise.all([
+      this.rows("SELECT category_id AS id, COUNT(*) AS n FROM posts WHERE category_id IS NOT NULL GROUP BY category_id"),
+      this.rows("SELECT tag_id AS id, COUNT(*) AS n FROM post_tags GROUP BY tag_id"),
+    ]);
+    const toMap = (rows: Row[]) => Object.fromEntries(rows.map((r) => [String(r.id), Number(r.n)]));
+    return { categories: toMap(cats), tags: toMap(tags) };
+  }
+
+  async renameCategory(id: string, name: string): Promise<Category> {
+    await this.db.prepare("UPDATE categories SET name = ? WHERE id = ?").bind(name.trim(), id).run();
+    const r = await this.row("SELECT * FROM categories WHERE id = ?", id);
+    if (!r) throw new Error(`Category ${id} not found`);
+    return mapCategory(r);
+  }
+
+  async deleteCategory(id: string): Promise<void> {
+    // posts.category_id is ON DELETE SET NULL.
+    await this.db.prepare("DELETE FROM categories WHERE id = ?").bind(id).run();
+  }
+
+  async mergeCategory(fromId: string, intoId: string): Promise<void> {
+    if (fromId === intoId || !(await this.row("SELECT 1 FROM categories WHERE id = ?", intoId))) return;
+    await this.db.batch([
+      this.db.prepare("UPDATE posts SET category_id = ? WHERE category_id = ?").bind(intoId, fromId),
+      this.db.prepare("DELETE FROM categories WHERE id = ?").bind(fromId),
+    ]);
+  }
+
+  async renameTag(id: string, name: string): Promise<Tag> {
+    const affected = await this.postIdsWithTag(id);
+    await this.db.batch([
+      this.db.prepare("UPDATE tags SET name = ? WHERE id = ?").bind(name.trim(), id),
+      ...this.ftsSyncMany(affected),
+    ]);
+    const r = await this.row("SELECT * FROM tags WHERE id = ?", id);
+    if (!r) throw new Error(`Tag ${id} not found`);
+    return mapTag(r);
+  }
+
+  async deleteTag(id: string): Promise<void> {
+    const affected = await this.postIdsWithTag(id);
+    // post_tags rows go via ON DELETE CASCADE.
+    await this.db.batch([this.db.prepare("DELETE FROM tags WHERE id = ?").bind(id), ...this.ftsSyncMany(affected)]);
+  }
+
+  async mergeTag(fromId: string, intoId: string): Promise<void> {
+    if (fromId === intoId || !(await this.row("SELECT 1 FROM tags WHERE id = ?", intoId))) return;
+    const affected = await this.postIdsWithTag(fromId);
+    await this.db.batch([
+      this.db
+        .prepare("INSERT OR IGNORE INTO post_tags (post_id, tag_id) SELECT post_id, ? FROM post_tags WHERE tag_id = ?")
+        .bind(intoId, fromId),
+      this.db.prepare("DELETE FROM tags WHERE id = ?").bind(fromId),
+      ...this.ftsSyncMany(affected),
+    ]);
   }
 
   async listTags(): Promise<Tag[]> {
@@ -481,6 +640,43 @@ export class D1Repository implements BlogRepository {
 
   async deletePage(id: string): Promise<void> {
     await this.db.prepare("DELETE FROM pages WHERE id = ?").bind(id).run();
+  }
+
+  async reorderPages(ids: string[]): Promise<void> {
+    if (!ids.length) return;
+    await this.db.batch(
+      ids.map((id, i) => this.db.prepare("UPDATE pages SET menu_order = ? WHERE id = ?").bind(i, id)),
+    );
+  }
+
+  // -- media ----------------------------------------------------------------
+
+  async addMedia(item: MediaItem): Promise<MediaItem> {
+    await this.db
+      .prepare(
+        `INSERT OR REPLACE INTO media (key, url, alt, width, height, bytes, content_type, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(item.key, item.url, item.alt, item.width, item.height, item.bytes, item.contentType, item.createdAt)
+      .run();
+    return { ...item };
+  }
+
+  async listMedia(): Promise<MediaItem[]> {
+    return (await this.rows("SELECT * FROM media ORDER BY created_at DESC")).map(mapMedia);
+  }
+
+  async getMedia(key: string): Promise<MediaItem | null> {
+    const r = await this.row("SELECT * FROM media WHERE key = ?", key);
+    return r ? mapMedia(r) : null;
+  }
+
+  async updateMediaAlt(key: string, alt: string): Promise<void> {
+    await this.db.prepare("UPDATE media SET alt = ? WHERE key = ?").bind(alt.trim(), key).run();
+  }
+
+  async deleteMedia(key: string): Promise<void> {
+    await this.db.prepare("DELETE FROM media WHERE key = ?").bind(key).run();
   }
 
   // -- comments -------------------------------------------------------------
@@ -587,10 +783,20 @@ export class D1Repository implements BlogRepository {
     const cur = await this.getSettings();
     const next = { ...cur, ...Object.fromEntries(Object.entries(settings).filter(([, v]) => v !== undefined)) };
     await this.db
-      .prepare("UPDATE settings SET title = ?, tagline = ?, description = ?, author_name = ?, author_photo_url = ? WHERE id = 1")
-      .bind(next.title, next.tagline, next.description, next.authorName, next.authorPhotoUrl ?? null)
+      .prepare(
+        `UPDATE settings SET title = ?, tagline = ?, description = ?, author_name = ?, author_photo_url = ?,
+           home_layout = ? WHERE id = 1`,
+      )
+      .bind(
+        next.title,
+        next.tagline,
+        next.description,
+        next.authorName,
+        next.authorPhotoUrl ?? null,
+        JSON.stringify(normalizeHomeLayout(next.homeLayout)),
+      )
       .run();
-    return next;
+    return { ...next, homeLayout: normalizeHomeLayout(next.homeLayout) };
   }
 
   // -- login rate limiting --------------------------------------------------

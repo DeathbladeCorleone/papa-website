@@ -1,58 +1,134 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
+import Icon from "@/components/admin/Icon.astro";
 import { repoFrom } from "@/lib/context";
+import { postState } from "@/lib/domain/schedule";
 import { formatDate } from "@/lib/format";
 
 const repo = repoFrom(Astro.locals);
-const [posts, pending] = await Promise.all([
-  repo.listAllPosts(),
-  repo.listCommentsByStatus("pending"),
-]);
+const posts = (await repo.listAllPosts()).map((p) => ({ ...p, state: postState(p) }));
+const show = Astro.url.searchParams.get("show") ?? "all";
+const counts = {
+  all: posts.length,
+  published: posts.filter((p) => p.state === "published").length,
+  scheduled: posts.filter((p) => p.state === "scheduled").length,
+  draft: posts.filter((p) => p.state === "draft").length,
+};
+const tabs = [
+  { key: "all", label: "All" },
+  { key: "published", label: "Published" },
+  { key: "scheduled", label: "Scheduled" },
+  { key: "draft", label: "Drafts" },
+] as const;
+const visible = show === "all" ? posts : posts.filter((p) => p.state === show);
+const stateLabel = { published: "Published", scheduled: "Scheduled", draft: "Draft" };
 ---
 
-<AdminLayout title="Posts" pending={pending.length}>
-  <div class="toolbar" style="justify-content:space-between">
-    <h1 style="margin:0">Posts</h1>
-    <a class="btn" href="/admin/posts/new">✎ New post</a>
-  </div>
+<AdminLayout title="Essays">
+  <header class="a-head">
+    <div>
+      <div class="a-kicker">Write</div>
+      <h1>Essays</h1>
+    </div>
+    <div class="actions"><a class="a-btn" href="/admin/posts/new"><Icon name="pen" size={16} /> Write an essay</a></div>
+  </header>
 
-  <table class="admin-table">
-    <thead>
-      <tr><th>Title</th><th>Status</th><th>Updated</th><th>Actions</th></tr>
-    </thead>
-    <tbody>
-      {posts.map((p) => (
-        <tr>
-          <td>
-            <a href={`/admin/posts/${p.id}`}>{p.title}</a>
-            {p.featured && <span class="pill" style="margin-left:0.5rem">featured</span>}
-          </td>
-          <td><span class={`pill ${p.status}`}>{p.status}</span></td>
-          <td class="muted">{formatDate(p.updatedAt)}</td>
-          <td>
-            <a class="btn secondary small" href={`/admin/posts/${p.id}`}>Edit</a>
-            {p.status === "published" ? (
-              <form class="inline-form" method="POST" action="/api/admin/posts">
-                <input type="hidden" name="_action" value="unpublish" />
-                <input type="hidden" name="id" value={p.id} />
-                <button class="btn secondary small" type="submit">Unpublish</button>
-              </form>
-            ) : (
-              <form class="inline-form" method="POST" action="/api/admin/posts">
-                <input type="hidden" name="_action" value="publish" />
-                <input type="hidden" name="id" value={p.id} />
-                <button class="btn secondary small" type="submit">Publish</button>
-              </form>
-            )}
-            <form class="inline-form" method="POST" action="/api/admin/posts" data-confirm="Delete this post permanently?">
-              <input type="hidden" name="_action" value="delete" />
-              <input type="hidden" name="id" value={p.id} />
-              <button class="btn danger small" type="submit">Delete</button>
-            </form>
-          </td>
-        </tr>
+  <nav class="a-tabs" aria-label="Filter essays">
+    {tabs.filter((t) => t.key === "all" || counts[t.key] > 0 || show === t.key).map((t) => (
+      <a href={t.key === "all" ? "/admin/posts" : `/admin/posts?show=${t.key}`} aria-current={show === t.key ? "page" : undefined}>
+        {t.label}<span class="n">{counts[t.key]}</span>
+      </a>
+    ))}
+  </nav>
+
+  {posts.length > 4 && (
+    <div class="a-toolbar">
+      <label class="a-search">
+        <Icon name="search" size={16} />
+        <span class="visually-hidden">Find an essay</span>
+        <input type="search" placeholder="Find an essay by title…" data-filter />
+      </label>
+    </div>
+  )}
+
+  {visible.length === 0 ? (
+    <div class="a-empty">
+      <h3>{posts.length === 0 ? "No essays yet" : "Nothing here"}</h3>
+      <p>{posts.length === 0 ? "Everything you write will be listed here, newest first." : "No essays match this filter."}</p>
+      <a class="a-btn" href="/admin/posts/new"><Icon name="pen" size={16} /> Write an essay</a>
+    </div>
+  ) : (
+    <div class="a-list" style="margin-top:18px">
+      {visible.map((p) => (
+        <div class="a-row" data-title={p.title.toLowerCase()}>
+          <a class="a-thumb" href={`/admin/posts/${p.id}`} tabindex="-1" aria-hidden="true">
+            {p.coverUrl ? <img src={p.coverUrl} alt="" loading="lazy" /> : <span>{(p.title || "U").charAt(0)}</span>}
+          </a>
+          <div>
+            <a class="t" href={`/admin/posts/${p.id}`}>{p.title || "Untitled draft"}</a>
+            <div class="m">
+              <span class={`a-badge st-inline ${p.state}`}>{stateLabel[p.state]}</span>
+              {p.featured && <span class="a-tag accent">On home page</span>}
+              {p.category && <span>{p.category.name}</span>}
+              {p.category && <span class="dot"></span>}
+              <span>
+                {p.state === "published" && p.publishedAt ? `Published ${formatDate(p.publishedAt)}`
+                  : p.state === "scheduled" ? `Goes live ${formatDate(p.publishedAt!)}`
+                  : `Edited ${formatDate(p.updatedAt)}`}
+              </span>
+            </div>
+          </div>
+          <div class="st"><span class={`a-badge ${p.state}`}>{stateLabel[p.state]}</span></div>
+          <div class="num">{p.state === "published" ? `${(p.views ?? 0).toLocaleString("en-IN")} reads` : ""}</div>
+          <div class="acts">
+            <a class="a-btn ghost sm" href={`/admin/posts/${p.id}`}>Edit</a>
+            <details class="a-menu">
+              <summary class="a-btn quiet sm icon" aria-label="More actions"><Icon name="more" /></summary>
+              <div class="pop">
+                {p.state === "published" ? (
+                  <a href={`/blog/${p.slug}`} target="_blank" rel="noopener"><Icon name="external" size={16} /> View on website</a>
+                ) : (
+                  <a href={`/admin/posts/${p.id}/preview`} target="_blank" rel="noopener"><Icon name="eye" size={16} /> Preview</a>
+                )}
+                {p.state !== "draft" && !p.featured && (
+                  <form method="POST" action="/api/admin/posts">
+                    <input type="hidden" name="_action" value="feature" />
+                    <input type="hidden" name="id" value={p.id} />
+                    <button type="submit"><Icon name="star" size={16} /> Feature on home page</button>
+                  </form>
+                )}
+                {p.state === "draft" ? (
+                  <form method="POST" action="/api/admin/posts">
+                    <input type="hidden" name="_action" value="publish" />
+                    <input type="hidden" name="id" value={p.id} />
+                    <button type="submit"><Icon name="check" size={16} /> Publish now</button>
+                  </form>
+                ) : (
+                  <form method="POST" action="/api/admin/posts">
+                    <input type="hidden" name="_action" value="unpublish" />
+                    <input type="hidden" name="id" value={p.id} />
+                    <button type="submit"><Icon name="undo" size={16} /> Move back to drafts</button>
+                  </form>
+                )}
+                <hr />
+                <form method="POST" action="/api/admin/posts" data-confirm={`Delete “${p.title || "this draft"}” for good? This cannot be undone.`}>
+                  <input type="hidden" name="_action" value="delete" />
+                  <input type="hidden" name="id" value={p.id} />
+                  <button type="submit" class="danger"><Icon name="trash" size={16} /> Delete</button>
+                </form>
+              </div>
+            </details>
+          </div>
+        </div>
       ))}
-      {posts.length === 0 && <tr><td colspan="4" class="muted">No posts yet.</td></tr>}
-    </tbody>
-  </table>
+    </div>
+  )}
+  <script is:inline>
+    document.querySelector("[data-filter]")?.addEventListener("input", (e) => {
+      const q = e.target.value.trim().toLowerCase();
+      document.querySelectorAll(".a-row[data-title]").forEach((row) => {
+        row.style.display = !q || row.dataset.title.includes(q) ? "" : "none";
+      });
+    });
+  </script>
 </AdminLayout>

@@ -34,6 +34,8 @@ export interface Post {
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Times the public essay page was opened (filled in by repositories when reading). */
+  views?: number;
 }
 
 /** A post joined with its category and tags, ready for rendering. */
@@ -95,4 +97,44 @@ export interface SiteSettings {
   authorName: string;
   /** Portrait shown in the home page About section. */
   authorPhotoUrl: string | null;
+  /** Order, visibility and headings of the home page sections. */
+  homeLayout: HomeLayout;
+}
+
+/** Sections below the hero on the home page, in the order Pradeep chooses. */
+export type HomeSectionKey = "mostRead" | "subscribe" | "about" | "latest" | "topics";
+
+export interface HomeSection {
+  key: HomeSectionKey;
+  visible: boolean;
+  /** Heading shown above the section (unused by Subscribe). */
+  title: string;
+}
+
+export interface HomeLayout {
+  sections: HomeSection[];
+  /** How many essays the Most read and Latest sections show. */
+  mostReadCount: number;
+  latestCount: number;
+}
+
+/** An image uploaded through the dashboard. */
+export interface MediaItem {
+  key: string;
+  url: string;
+  alt: string;
+  width: number | null;
+  height: number | null;
+  bytes: number;
+  contentType: string;
+  createdAt: string;
+}
+
+/** An earlier saved version of a post's title and body. */
+export interface PostRevision {
+  id: string;
+  postId: string;
+  title: string;
+  bodyHtml: string;
+  createdAt: string;
 }

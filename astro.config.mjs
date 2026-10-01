@@ -13,4 +13,6 @@ export default defineConfig({
     platformProxy: { enabled: true },
   }),
   integrations: [react()],
+  // Local D1/R2 data lives in .wrangler/; writing to it must not reload the page.
+  vite: { server: { watch: { ignored: ["**/.wrangler/**"] } } },
 });

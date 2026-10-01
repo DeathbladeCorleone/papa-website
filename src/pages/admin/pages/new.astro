@@ -1,12 +1,14 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
-import PageForm from "@/components/admin/PageForm.astro";
-import { repoFrom } from "@/lib/context";
-const pending = await repoFrom(Astro.locals).listCommentsByStatus("pending");
-const error = Astro.url.searchParams.get("error");
+import PostEditor from "@/components/admin/editor/PostEditor.tsx";
+
+const initial = {
+  id: null, slug: "", title: "", excerpt: "", bodyHtml: "", coverUrl: null, categoryId: null, tags: [],
+  featured: false, seoTitle: null, seoDescription: null, status: "draft" as const, publishedAt: null, updatedAt: null,
+  state: "draft" as const, showInMenu: true,
+};
 ---
-<AdminLayout title="New page" pending={pending.length}>
-  <h1>New page</h1>
-  {error === "title" && <p class="notice err">Please enter a title.</p>}
-  <PageForm />
+
+<AdminLayout title="New page" bare>
+  <PostEditor client:only="react" kind="page" initial={initial} categories={[]} allTags={[]} />
 </AdminLayout>

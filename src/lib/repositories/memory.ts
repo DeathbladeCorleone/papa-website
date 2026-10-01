@@ -3,8 +3,10 @@ import type {
   Comment,
   CommentStatus,
   ContactMessage,
+  MediaItem,
   Page,
   Post,
+  PostRevision,
   PostWithRelations,
   SiteSettings,
   Subscriber,
@@ -15,7 +17,11 @@ import type {
   CreateCommentInput,
   CreatePostInput,
   ListPostsOptions,
+  UpdatePostOptions,
 } from "./types";
+import { MAX_REVISIONS, REVISION_INTERVAL_MS } from "./types";
+import { isLive } from "../domain/schedule";
+import { DEFAULT_HOME_LAYOUT, normalizeHomeLayout } from "../domain/home";
 import { uniqueSlug } from "../domain/slug";
 import { excerptFromHtml } from "../domain/excerpt";
 import { searchPosts } from "../domain/search";
@@ -39,6 +45,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   description: "Writing on a variety of topics by Pradeep Singh.",
   authorName: "Pradeep Singh",
   authorPhotoUrl: null,
+  homeLayout: DEFAULT_HOME_LAYOUT,
 };
 
 /**
@@ -55,6 +62,9 @@ export class MemoryRepository implements BlogRepository {
   private messages: ContactMessage[] = [];
   private subscribers: Subscriber[] = [];
   private settings: SiteSettings;
+  private media: MediaItem[] = [];
+  private views = new Map<string, number>();
+  private revisions: PostRevision[] = [];
 
   constructor(seed: SeedData = {}) {
     this.categories = seed.categories ?? [];
@@ -63,11 +73,13 @@ export class MemoryRepository implements BlogRepository {
     this.pages = seed.pages ?? [];
     this.comments = seed.comments ?? [];
     this.settings = { ...DEFAULT_SETTINGS, ...seed.settings };
+    this.settings.homeLayout = normalizeHomeLayout(this.settings.homeLayout);
   }
 
   private hydrate(post: Post): PostWithRelations {
     return {
       ...post,
+      views: this.views.get(post.id) ?? 0,
       category: this.categories.find((c) => c.id === post.categoryId) ?? null,
       tags: post.tagIds
         .map((tid) => this.tags.find((t) => t.id === tid))
@@ -89,7 +101,7 @@ export class MemoryRepository implements BlogRepository {
 
   private publishedSorted(): Post[] {
     return this.posts
-      .filter((p) => p.status === "published")
+      .filter((p) => isLive(p))
       .sort((a, b) => (b.publishedAt ?? b.createdAt).localeCompare(a.publishedAt ?? a.createdAt));
   }
 
@@ -105,7 +117,7 @@ export class MemoryRepository implements BlogRepository {
   }
 
   async getPublishedBySlug(slug: string): Promise<PostWithRelations | null> {
-    const post = this.posts.find((p) => p.slug === slug && p.status === "published");
+    const post = this.posts.find((p) => p.slug === slug && isLive(p));
     return post ? this.hydrate(post) : null;
   }
 
@@ -129,10 +141,8 @@ export class MemoryRepository implements BlogRepository {
     return scored.slice(0, limit).map((s) => this.hydrate(s.p));
   }
 
-  private views = new Map<string, number>();
-
   async recordView(postId: string): Promise<void> {
-    const post = this.posts.find((p) => p.id === postId && p.status === "published");
+    const post = this.posts.find((p) => p.id === postId && isLive(p));
     if (post) this.views.set(postId, (this.views.get(postId) ?? 0) + 1);
   }
 
@@ -145,7 +155,7 @@ export class MemoryRepository implements BlogRepository {
   }
 
   async searchPublished(query: string): Promise<PostWithRelations[]> {
-    return searchPosts(this.posts.map((p) => this.hydrate(p)), query);
+    return searchPosts(this.posts.filter((p) => isLive(p)).map((p) => this.hydrate(p)), query);
   }
 
   async listAllPosts(): Promise<PostWithRelations[]> {
@@ -175,7 +185,7 @@ export class MemoryRepository implements BlogRepository {
       featured: input.featured ?? false,
       seoTitle: input.seoTitle ?? null,
       seoDescription: input.seoDescription ?? null,
-      publishedAt: status === "published" ? ts : null,
+      publishedAt: input.publishedAt ?? (status === "published" ? ts : null),
       createdAt: ts,
       updatedAt: ts,
     };
@@ -183,9 +193,13 @@ export class MemoryRepository implements BlogRepository {
     return this.hydrate(post);
   }
 
-  async updatePost(pid: string, input: Partial<CreatePostInput>): Promise<PostWithRelations> {
+  async updatePost(pid: string, input: Partial<CreatePostInput>, opts: UpdatePostOptions = {}): Promise<PostWithRelations> {
     const post = this.posts.find((p) => p.id === pid);
     if (!post) throw new Error(`Post ${pid} not found`);
+    this.snapshot(post, input, opts);
+    if (input.title !== undefined && input.title !== post.title && post.status === "draft" && !post.publishedAt) {
+      post.slug = uniqueSlug(input.title, this.posts.filter((p) => p.id !== pid).map((p) => p.slug));
+    }
     if (input.title !== undefined) post.title = input.title;
     if (input.bodyHtml !== undefined) post.bodyHtml = input.bodyHtml;
     if (input.excerpt !== undefined) post.excerpt = input.excerpt.trim() || excerptFromHtml(post.bodyHtml);
@@ -199,6 +213,9 @@ export class MemoryRepository implements BlogRepository {
       post.status = input.status;
       if (input.status === "published" && !post.publishedAt) post.publishedAt = now();
     }
+    if (input.publishedAt !== undefined) {
+      post.publishedAt = input.publishedAt ?? (post.status === "published" ? now() : null);
+    }
     post.updatedAt = now();
     return this.hydrate(post);
   }
@@ -206,6 +223,40 @@ export class MemoryRepository implements BlogRepository {
   async deletePost(pid: string): Promise<void> {
     this.posts = this.posts.filter((p) => p.id !== pid);
     this.comments = this.comments.filter((c) => c.postId !== pid);
+    this.revisions = this.revisions.filter((r) => r.postId !== pid);
+  }
+
+  /** Keep the current title/body as a revision before it's overwritten. */
+  private snapshot(post: Post, input: Partial<CreatePostInput>, opts: UpdatePostOptions): void {
+    const changed =
+      (input.title !== undefined && input.title !== post.title) ||
+      (input.bodyHtml !== undefined && input.bodyHtml !== post.bodyHtml);
+    if (!changed) return;
+    const mine = this.revisions.filter((r) => r.postId === post.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const latest = mine[0];
+    if (!opts.forceRevision && latest && Date.now() - Date.parse(latest.createdAt) < REVISION_INTERVAL_MS) return;
+    // Strictly increasing timestamps keep "newest first" stable within one millisecond.
+    let ts = now();
+    if (latest && ts <= latest.createdAt) ts = new Date(Date.parse(latest.createdAt) + 1).toISOString();
+    this.revisions.push({ id: id("rev"), postId: post.id, title: post.title, bodyHtml: post.bodyHtml, createdAt: ts });
+    const pruned = new Set(mine.slice(MAX_REVISIONS - 1).map((r) => r.id));
+    this.revisions = this.revisions.filter((r) => !pruned.has(r.id));
+  }
+
+  async listRevisions(postId: string): Promise<PostRevision[]> {
+    return this.revisions
+      .filter((r) => r.postId === postId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((r) => ({ ...r }));
+  }
+
+  async getRevision(rid: string): Promise<PostRevision | null> {
+    const r = this.revisions.find((x) => x.id === rid);
+    return r ? { ...r } : null;
+  }
+
+  async setFeaturedPost(pid: string | null): Promise<void> {
+    for (const p of this.posts) p.featured = p.id === pid;
   }
 
   async listCategories(): Promise<Category[]> {
@@ -222,6 +273,54 @@ export class MemoryRepository implements BlogRepository {
     const cat: Category = { id: id("cat"), name, slug: uniqueSlug(name, this.categories.map((c) => c.slug)) };
     this.categories.push(cat);
     return cat;
+  }
+
+  async taxonomyCounts(): Promise<{ categories: Record<string, number>; tags: Record<string, number> }> {
+    const categories: Record<string, number> = {};
+    const tags: Record<string, number> = {};
+    for (const p of this.posts) {
+      if (p.categoryId) categories[p.categoryId] = (categories[p.categoryId] ?? 0) + 1;
+      for (const t of new Set(p.tagIds)) tags[t] = (tags[t] ?? 0) + 1;
+    }
+    return { categories, tags };
+  }
+
+  async renameCategory(cid: string, name: string): Promise<Category> {
+    const c = this.categories.find((x) => x.id === cid);
+    if (!c) throw new Error(`Category ${cid} not found`);
+    c.name = name.trim();
+    return { ...c };
+  }
+
+  async deleteCategory(cid: string): Promise<void> {
+    this.categories = this.categories.filter((c) => c.id !== cid);
+    for (const p of this.posts) if (p.categoryId === cid) p.categoryId = null;
+  }
+
+  async mergeCategory(fromId: string, intoId: string): Promise<void> {
+    if (fromId === intoId || !this.categories.some((c) => c.id === intoId)) return;
+    for (const p of this.posts) if (p.categoryId === fromId) p.categoryId = intoId;
+    this.categories = this.categories.filter((c) => c.id !== fromId);
+  }
+
+  async renameTag(tid: string, name: string): Promise<Tag> {
+    const t = this.tags.find((x) => x.id === tid);
+    if (!t) throw new Error(`Tag ${tid} not found`);
+    t.name = name.trim();
+    return { ...t };
+  }
+
+  async deleteTag(tid: string): Promise<void> {
+    this.tags = this.tags.filter((t) => t.id !== tid);
+    for (const p of this.posts) p.tagIds = p.tagIds.filter((t) => t !== tid);
+  }
+
+  async mergeTag(fromId: string, intoId: string): Promise<void> {
+    if (fromId === intoId || !this.tags.some((t) => t.id === intoId)) return;
+    for (const p of this.posts) {
+      if (p.tagIds.includes(fromId)) p.tagIds = [...new Set(p.tagIds.map((t) => (t === fromId ? intoId : t)))];
+    }
+    this.tags = this.tags.filter((t) => t.id !== fromId);
   }
 
   async listTags(): Promise<Tag[]> {
@@ -294,6 +393,37 @@ export class MemoryRepository implements BlogRepository {
     this.pages = this.pages.filter((p) => p.id !== pid);
   }
 
+  async reorderPages(ids: string[]): Promise<void> {
+    ids.forEach((pid, i) => {
+      const page = this.pages.find((p) => p.id === pid);
+      if (page) page.menuOrder = i;
+    });
+  }
+
+  async addMedia(item: MediaItem): Promise<MediaItem> {
+    this.media = this.media.filter((m) => m.key !== item.key);
+    this.media.push({ ...item });
+    return { ...item };
+  }
+
+  async listMedia(): Promise<MediaItem[]> {
+    return [...this.media].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((m) => ({ ...m }));
+  }
+
+  async getMedia(key: string): Promise<MediaItem | null> {
+    const m = this.media.find((x) => x.key === key);
+    return m ? { ...m } : null;
+  }
+
+  async updateMediaAlt(key: string, alt: string): Promise<void> {
+    const m = this.media.find((x) => x.key === key);
+    if (m) m.alt = alt.trim();
+  }
+
+  async deleteMedia(key: string): Promise<void> {
+    this.media = this.media.filter((m) => m.key !== key);
+  }
+
   async listApprovedForPost(postId: string): Promise<Comment[]> {
     return this.comments.filter((c) => c.postId === postId && c.status === "approved");
   }
@@ -364,7 +494,9 @@ export class MemoryRepository implements BlogRepository {
   }
 
   async updateSettings(settings: Partial<SiteSettings>): Promise<SiteSettings> {
-    this.settings = { ...this.settings, ...settings };
+    const defined = Object.fromEntries(Object.entries(settings).filter(([, v]) => v !== undefined));
+    this.settings = { ...this.settings, ...defined };
+    this.settings.homeLayout = normalizeHomeLayout(this.settings.homeLayout);
     return { ...this.settings };
   }
 

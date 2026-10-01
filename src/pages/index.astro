@@ -8,6 +8,7 @@ import { paragraphs } from "@/lib/domain/html";
 import { readingTimeMinutes } from "@/lib/domain/reading-time";
 import { formatDate, isoDate } from "@/lib/format";
 import { siteUrl } from "@/config/site";
+import type { HomeSection, HomeSectionKey } from "@/lib/domain/types";
 
 const repo = repoFrom(Astro.locals);
 const [settings, featured, pages, categories, about] = await Promise.all([
@@ -18,12 +19,14 @@ const [settings, featured, pages, categories, about] = await Promise.all([
   repo.getPublishedPageBySlug("about"),
 ]);
 const exclude = featured ? [featured.id] : [];
+const layout = settings.homeLayout;
+const section = Object.fromEntries(layout.sections.map((x) => [x.key, x])) as Record<HomeSectionKey, HomeSection>;
 const [mostRead, newest, counts] = await Promise.all([
-  repo.listMostRead(4, exclude),
-  repo.listPublished({ limit: 4 }),
+  repo.listMostRead(layout.mostReadCount, exclude),
+  repo.listPublished({ limit: layout.latestCount + 1 }),
   Promise.all(categories.map((c) => repo.countPublished({ categorySlug: c.slug }))),
 ]);
-const latest = newest.filter((p) => !exclude.includes(p.id)).slice(0, 3);
+const latest = newest.filter((p) => !exclude.includes(p.id)).slice(0, layout.latestCount);
 const topics = categories.map((c, i) => ({ ...c, count: counts[i] })).filter((c) => c.count > 0);
 const [aboutLead = "", aboutBody = ""] = about ? paragraphs(about.bodyHtml) : [];
 const mins = (html: string) => readingTimeMinutes(html);
@@ -65,82 +68,91 @@ const meta = pageMeta({ path: "/" }, settings, siteUrl(envFrom(Astro.locals)));
     </div>
   </section>
 
-  <!-- 2. Most read -->
-  {mostRead.length > 0 && (
-    <section class="wrap home-block" id="most-read">
-      <div class="block-head">
-        <h2>Most read</h2>
-        <a href="/blog">All essays &rarr;</a>
-      </div>
-      <ol class="most-read">
-        {mostRead.map((p, i) => (
-          <li>
-            <div class="rank">{String(i + 1).padStart(2, "0")}</div>
-            <div>
-              <h3><a href={`/blog/${p.slug}`}>{p.title}</a></h3>
-              <div class="meta">
-                {p.category?.name}{p.category && mins(p.bodyHtml) > 0 && " · "}{mins(p.bodyHtml) > 0 && `${mins(p.bodyHtml)} min`}
-              </div>
+  {layout.sections.filter((x) => x.visible).map((x) => (
+    x.key === "mostRead" ? (
+      <Fragment>
+        {mostRead.length > 0 && (
+          <section class="wrap home-block" id="most-read">
+            <div class="block-head">
+              <h2>{section.mostRead.title}</h2>
+              <a href="/blog">All essays &rarr;</a>
             </div>
-          </li>
-        ))}
-      </ol>
-    </section>
-  )}
-
-  <!-- 3. Subscribe -->
-  <div class="wrap"><Subscribe variant="band" /></div>
-
-  <!-- 4. About -->
-  {(aboutLead || settings.authorPhotoUrl) && (
-    <section class:list={["wrap", "about-block", { "no-photo": !settings.authorPhotoUrl }]}>
-      {settings.authorPhotoUrl && (
-        <div class="portrait"><img src={settings.authorPhotoUrl} alt={settings.authorName} loading="lazy" /></div>
-      )}
-      <div>
-        <div class="label accent">About me</div>
-        {aboutLead && <p class="about-lead">{aboutLead}</p>}
-        {aboutBody && <p class="about-body">{aboutBody}</p>}
-        {about && <a class="text-link" href="/about">More about me &rarr;</a>}
-      </div>
-    </section>
-  )}
-
-  <!-- 5. Latest -->
-  {latest.length > 0 && (
-    <section class="wrap home-block">
-      <div class="block-head">
-        <h2>Latest</h2>
-        <a href="/blog">All essays &rarr;</a>
-      </div>
-      <div class="latest">
-        {latest.map((p) => (
-          <article>
-            <a class="thumb" href={`/blog/${p.slug}`} tabindex="-1" aria-hidden="true">
-              {p.coverUrl ? <img src={p.coverUrl} alt="" loading="lazy" /> : <span>{p.category?.name ?? settings.title}</span>}
-            </a>
+            <ol class="most-read">
+              {mostRead.map((p, i) => (
+                <li>
+                  <div class="rank">{String(i + 1).padStart(2, "0")}</div>
+                  <div>
+                    <h3><a href={`/blog/${p.slug}`}>{p.title}</a></h3>
+                    <div class="meta">
+                      {p.category?.name}{p.category && mins(p.bodyHtml) > 0 && " · "}{mins(p.bodyHtml) > 0 && `${mins(p.bodyHtml)} min`}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+      </Fragment>
+    ) : x.key === "subscribe" ? (
+      <Fragment>
+        <div class="wrap home-subscribe"><Subscribe variant="band" /></div>
+      </Fragment>
+    ) : x.key === "about" ? (
+      <Fragment>
+        {(aboutLead || settings.authorPhotoUrl) && (
+          <section class:list={["wrap", "about-block", { "no-photo": !settings.authorPhotoUrl }]}>
+            {settings.authorPhotoUrl && (
+              <div class="portrait"><img src={settings.authorPhotoUrl} alt={settings.authorName} loading="lazy" /></div>
+            )}
             <div>
-              <div class="meta">
-                {p.category?.name}{p.category && mins(p.bodyHtml) > 0 && " · "}{mins(p.bodyHtml) > 0 && `${mins(p.bodyHtml)} min`}
-              </div>
-              <h3><a href={`/blog/${p.slug}`}>{p.title}</a></h3>
-              {p.excerpt && <p class="excerpt">{p.excerpt}</p>}
+              <div class="label accent">{section.about.title}</div>
+              {aboutLead && <p class="about-lead">{aboutLead}</p>}
+              {aboutBody && <p class="about-body">{aboutBody}</p>}
+              {about && <a class="text-link" href="/about">More about me &rarr;</a>}
             </div>
-          </article>
-        ))}
-      </div>
-    </section>
-  )}
-
-  <!-- 6. Topics -->
-  {topics.length > 0 && (
-    <div class="ruled">
-      <section class="wrap rail wander">
-        <div class="label">Wander</div>
-        <div class="wander-links">
-          {topics.map((t) => <a href={`/category/${t.slug}`}>{t.name}<sup>{t.count}</sup></a>)}
-        </div>
-      </section>
-    </div>
-  )}
+          </section>
+        )}
+      </Fragment>
+    ) : x.key === "latest" ? (
+      <Fragment>
+        {latest.length > 0 && (
+          <section class="wrap home-block">
+            <div class="block-head">
+              <h2>{section.latest.title}</h2>
+              <a href="/blog">All essays &rarr;</a>
+            </div>
+            <div class="latest">
+              {latest.map((p) => (
+                <article>
+                  <a class="thumb" href={`/blog/${p.slug}`} tabindex="-1" aria-hidden="true">
+                    {p.coverUrl ? <img src={p.coverUrl} alt="" loading="lazy" /> : <span>{p.category?.name ?? settings.title}</span>}
+                  </a>
+                  <div>
+                    <div class="meta">
+                      {p.category?.name}{p.category && mins(p.bodyHtml) > 0 && " · "}{mins(p.bodyHtml) > 0 && `${mins(p.bodyHtml)} min`}
+                    </div>
+                    <h3><a href={`/blog/${p.slug}`}>{p.title}</a></h3>
+                    {p.excerpt && <p class="excerpt">{p.excerpt}</p>}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+      </Fragment>
+    ) : x.key === "topics" ? (
+      <Fragment>
+        {topics.length > 0 && (
+          <div class="ruled">
+            <section class="wrap rail wander">
+              <div class="label">{section.topics.title}</div>
+              <div class="wander-links">
+                {topics.map((t) => <a href={`/category/${t.slug}`}>{t.name}<sup>{t.count}</sup></a>)}
+              </div>
+            </section>
+          </div>
+        )}
+      </Fragment>
+    ) : null
+  ))}
 </Base>

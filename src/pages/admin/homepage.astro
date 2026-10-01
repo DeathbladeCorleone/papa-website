@@ -1,0 +1,24 @@
+---
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import HomeLayoutEditor from "@/components/admin/cms/HomeLayoutEditor.tsx";
+import { repoFrom } from "@/lib/context";
+import { isLive } from "@/lib/domain/schedule";
+
+const repo = repoFrom(Astro.locals);
+const [settings, posts] = await Promise.all([repo.getSettings(), repo.listAllPosts()]);
+const live = posts
+  .filter((p) => isLive(p))
+  .sort((a, b) => (b.publishedAt ?? b.createdAt).localeCompare(a.publishedAt ?? a.createdAt));
+const featured = live.find((p) => p.featured);
+const essays = live.map((p) => ({ id: p.id, title: p.title, coverUrl: p.coverUrl, date: p.publishedAt ?? p.createdAt }));
+---
+<AdminLayout title="Home page">
+  <header class="a-head">
+    <div>
+      <div class="a-kicker">Website</div>
+      <h1>Home page</h1>
+      <p class="lede">Choose what visitors see first, and which sections follow it.</p>
+    </div>
+  </header>
+  <HomeLayoutEditor client:load layout={settings.homeLayout} essays={essays} featuredId={featured?.id ?? null} />
+</AdminLayout>

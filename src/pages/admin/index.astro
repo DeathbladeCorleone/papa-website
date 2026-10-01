@@ -1,44 +1,167 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
+import Icon from "@/components/admin/Icon.astro";
 import { repoFrom } from "@/lib/context";
+import { postState } from "@/lib/domain/schedule";
+import { formatDate } from "@/lib/format";
+import { stripHtml } from "@/lib/domain/html";
 
 const repo = repoFrom(Astro.locals);
-const [posts, pending, messages, subscribers] = await Promise.all([
+const [posts, pending, messages, subscribers, settings] = await Promise.all([
   repo.listAllPosts(),
   repo.listCommentsByStatus("pending"),
   repo.listMessages(),
   repo.listSubscribers(),
+  repo.getSettings(),
 ]);
-const published = posts.filter((p) => p.status === "published").length;
-const drafts = posts.length - published;
+const withState = posts.map((p) => ({ ...p, state: postState(p) }));
+const published = withState.filter((p) => p.state === "published");
+const drafts = withState.filter((p) => p.state === "draft");
+const scheduled = withState.filter((p) => p.state === "scheduled").sort((a, b) => (a.publishedAt ?? "").localeCompare(b.publishedAt ?? ""));
 const unread = messages.filter((m) => !m.read).length;
+const totalReads = published.reduce((n, p) => n + (p.views ?? 0), 0);
+const lastDraft = drafts[0]; // listAllPosts is newest-edited first
+const popular = [...published].sort((a, b) => (b.views ?? 0) - (a.views ?? 0)).slice(0, 5);
+
+// Greeting in Indian time, since that's where Pradeep writes from.
+const hour = Number(new Intl.DateTimeFormat("en-GB", { hour: "numeric", hour12: false, timeZone: "Asia/Kolkata" }).format(new Date()));
+const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+const today = new Intl.DateTimeFormat("en-IN", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Kolkata" }).format(new Date());
+const firstName = settings.authorName.split(/\s+/)[0];
+const snippet = (html: string) => {
+  const t = stripHtml(html);
+  return t.length > 140 ? t.slice(0, 140).replace(/\s+\S*$/, "") + "…" : t;
+};
 ---
 
-<AdminLayout title="Dashboard" pending={pending.length}>
-  <h1>Welcome back</h1>
-  <div class="stat-grid">
-    <div class="stat"><div class="n">{published}</div><div class="l">Published posts</div></div>
-    <div class="stat"><div class="n">{drafts}</div><div class="l">Drafts</div></div>
-    <div class="stat"><div class="n">{pending.length}</div><div class="l">Comments to review</div></div>
-    <div class="stat"><div class="n">{unread}</div><div class="l">Unread messages</div></div>
-    <div class="stat"><div class="n">{subscribers.length}</div><div class="l">Subscribers</div></div>
+<AdminLayout title="Overview">
+  <header class="a-head">
+    <div>
+      <div class="a-kicker">{today}</div>
+      <h1>{greeting}, {firstName}.</h1>
+    </div>
+    <div class="actions">
+      <a class="a-btn ghost" href="/" target="_blank" rel="noopener"><Icon name="external" size={16} /> View website</a>
+    </div>
+  </header>
+
+  <div class="a-hello">
+    {lastDraft ? (
+      <a class="a-compose" href={`/admin/posts/${lastDraft.id}`}>
+        {lastDraft.coverUrl && <img class="bgimg" src={lastDraft.coverUrl} alt="" />}
+        <div class="shade"></div>
+        <div class="k">Continue writing · edited {formatDate(lastDraft.updatedAt)}</div>
+        <h2>{lastDraft.title || "Untitled draft"}</h2>
+        {stripHtml(lastDraft.bodyHtml) && <p>{snippet(lastDraft.bodyHtml)}</p>}
+        <span class="go">Open the draft →</span>
+      </a>
+    ) : (
+      <a class="a-compose" href="/admin/posts/new">
+        <div class="k">Your desk is clear</div>
+        <h2>What's on your mind today?</h2>
+        <p>Start a new essay. It saves as you type, so nothing is lost.</p>
+        <span class="go">Start writing →</span>
+      </a>
+    )}
+
+    <div class="a-card a-todo">
+      <a href="/admin/comments">
+        <span class:list={["ic", { hot: pending.length > 0 }]}><Icon name="chat" /></span>
+        <span>{pending.length ? <><b>{pending.length}</b> comment{pending.length === 1 ? "" : "s"} waiting for you</> : "No comments waiting"}</span>
+        <span class="arrow">→</span>
+      </a>
+      <a href="/admin/messages">
+        <span class:list={["ic", { hot: unread > 0 }]}><Icon name="mail" /></span>
+        <span>{unread ? <><b>{unread}</b> unread message{unread === 1 ? "" : "s"}</> : "No new messages"}</span>
+        <span class="arrow">→</span>
+      </a>
+      <a href="/admin/posts/new">
+        <span class="ic"><Icon name="plus" /></span>
+        <span>Write a new essay</span>
+        <span class="arrow">→</span>
+      </a>
+      <a href="/admin/homepage">
+        <span class="ic"><Icon name="layout" /></span>
+        <span>Choose what the home page shows</span>
+        <span class="arrow">→</span>
+      </a>
+    </div>
   </div>
 
-  <div class="toolbar">
-    <a class="btn" href="/admin/posts/new">✎ Write a new post</a>
-    {pending.length > 0 && <a class="btn secondary" href="/admin/comments">Review {pending.length} comment{pending.length === 1 ? "" : "s"}</a>}
+  <div class="a-stats" style="margin-top:28px">
+    <a class="a-stat" href="/admin/posts?show=published"><div class="n">{published.length}</div><div class="l">Published</div></a>
+    <a class="a-stat" href="/admin/posts?show=draft"><div class="n">{drafts.length}</div><div class="l">Drafts</div></a>
+    <a class="a-stat" href="/admin/posts?show=scheduled"><div class="n">{scheduled.length}</div><div class="l">Scheduled</div></a>
+    <div class="a-stat"><div class="n">{totalReads.toLocaleString("en-IN")}</div><div class="l">Total reads</div></div>
+    <a class="a-stat" href="/admin/subscribers"><div class="n">{subscribers.length}</div><div class="l">Subscribers</div></a>
   </div>
 
-  <h2 style="font-family:var(--sans);font-size:1.1rem;margin-top:2rem">Recent posts</h2>
-  <table class="admin-table">
-    <tbody>
-      {posts.slice(0, 6).map((p) => (
-        <tr>
-          <td><a href={`/admin/posts/${p.id}`}>{p.title}</a></td>
-          <td><span class={`pill ${p.status}`}>{p.status}</span></td>
-        </tr>
-      ))}
-      {posts.length === 0 && <tr><td class="muted">No posts yet — write your first one.</td></tr>}
-    </tbody>
-  </table>
+  {scheduled.length > 0 && (
+    <section class="a-section">
+      <div class="a-section-head"><h2>Coming up</h2><span class="note">Scheduled to publish</span></div>
+      <div class="a-list" style="border-top:0">
+        {scheduled.map((p) => (
+          <div class="a-row no-thumb">
+            <div>
+              <a class="t" href={`/admin/posts/${p.id}`}>{p.title}</a>
+              <div class="m"><Icon name="calendar" size={14} /> Goes live {formatDate(p.publishedAt!)}</div>
+            </div>
+            <div class="st"><span class="a-badge scheduled">Scheduled</span></div>
+            <div class="num"></div>
+            <div class="acts"><a class="a-btn ghost sm" href={`/admin/posts/${p.id}`}>Edit</a></div>
+          </div>
+        ))}
+      </div>
+    </section>
+  )}
+
+  <section class="a-section">
+    <div class="a-section-head"><h2>Recently edited</h2><a href="/admin/posts">All essays →</a></div>
+    {withState.length === 0 ? (
+      <div class="a-empty">
+        <h3>No essays yet</h3>
+        <p>Your first essay will appear here.</p>
+        <a class="a-btn" href="/admin/posts/new"><Icon name="pen" size={16} /> Write the first one</a>
+      </div>
+    ) : (
+      <div class="a-list" style="border-top:0">
+        {withState.slice(0, 5).map((p) => (
+          <div class="a-row">
+            <a class="a-thumb" href={`/admin/posts/${p.id}`} tabindex="-1" aria-hidden="true">
+              {p.coverUrl ? <img src={p.coverUrl} alt="" loading="lazy" /> : <span>{(p.title || "U").charAt(0)}</span>}
+            </a>
+            <div>
+              <a class="t" href={`/admin/posts/${p.id}`}>{p.title || "Untitled draft"}</a>
+              <div class="m">
+                <span class={`a-badge st-inline ${p.state}`}>{p.state}</span>
+                {p.category && <span>{p.category.name}</span>}
+                {p.category && <span class="dot"></span>}
+                <span>Edited {formatDate(p.updatedAt)}</span>
+              </div>
+            </div>
+            <div class="st"><span class={`a-badge ${p.state}`} style="text-transform:capitalize">{p.state}</span></div>
+            <div class="num">{p.state === "published" ? `${(p.views ?? 0).toLocaleString("en-IN")} reads` : ""}</div>
+            <div class="acts"><a class="a-btn ghost sm" href={`/admin/posts/${p.id}`}>Edit</a></div>
+          </div>
+        ))}
+      </div>
+    )}
+  </section>
+
+  {popular.length > 1 && (
+    <section class="a-section">
+      <div class="a-section-head"><h2>Most read</h2><span class="note">All time</span></div>
+      <table class="a-table">
+        <tbody>
+          {popular.map((p, i) => (
+            <tr>
+              <td style="width:48px;font-family:var(--serif);font-size:22px;color:var(--ink-faint)">{String(i + 1).padStart(2, "0")}</td>
+              <td><a href={`/admin/posts/${p.id}`} style="color:var(--ink);font-family:var(--serif);font-size:17px">{p.title}</a></td>
+              <td style="text-align:right;color:var(--ink-faint);font-variant-numeric:tabular-nums">{(p.views ?? 0).toLocaleString("en-IN")} reads</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  )}
 </AdminLayout>
